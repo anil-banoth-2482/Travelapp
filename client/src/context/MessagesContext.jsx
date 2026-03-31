@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { apiFetch } from '../utils/api';
 
 const MessagesContext = createContext(null);
 
 export const convKey = (a, b) => [a, b].sort().join('::');
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
-// Use relative paths — Vite proxy injects x-app-token and forwards to :4000
-const apiFetch = async (path, opts = {}) => {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
+const apiFetchJson = async (path, opts = {}) => {
+  const res = await apiFetch(path, opts);
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return res.json();
 };
@@ -36,7 +33,7 @@ export const MessagesProvider = ({ children }) => {
   const fetchConversations = useCallback(async (user) => {
     if (!user) return;
     try {
-      const data = await apiFetch(`/api/messages/conversations?user=${encodeURIComponent(user)}`);
+      const data = await apiFetchJson(`/api/messages/conversations?user=${encodeURIComponent(user)}`);
       setConversations(data.conversations || []);
     } catch { /* offline – keep stale */ }
   }, []);
@@ -45,7 +42,7 @@ export const MessagesProvider = ({ children }) => {
   const fetchUnread = useCallback(async (user) => {
     if (!user) return;
     try {
-      const data = await apiFetch(`/api/messages/unread?user=${encodeURIComponent(user)}`);
+      const data = await apiFetchJson(`/api/messages/unread?user=${encodeURIComponent(user)}`);
       setUnreadSummary(data.unread || []);
       setTotalUnread(data.total || 0);
     } catch { /* offline */ }
@@ -54,7 +51,7 @@ export const MessagesProvider = ({ children }) => {
   /* ── Fetch a single thread ── */
   const fetchThread = useCallback(async (userA, userB) => {
     try {
-      const data = await apiFetch(`/api/messages?user=${encodeURIComponent(userA)}&other=${encodeURIComponent(userB)}`);
+      const data = await apiFetchJson(`/api/messages?user=${encodeURIComponent(userA)}&other=${encodeURIComponent(userB)}`);
       const key = convKey(userA, userB);
       setThreads(prev => ({ ...prev, [key]: data.messages || [] }));
       return data.messages || [];
@@ -96,7 +93,7 @@ export const MessagesProvider = ({ children }) => {
   const sendMessage = useCallback(async (fromUser, toUser, text) => {
     if (!text.trim()) return null;
     try {
-      const data = await apiFetch('/api/messages', {
+      const data = await apiFetchJson('/api/messages', {
         method: 'POST',
         body: JSON.stringify({ from: fromUser, to: toUser, text: text.trim() }),
       });
@@ -116,7 +113,7 @@ export const MessagesProvider = ({ children }) => {
   /* ── Mark conversation read ── */
   const markRead = useCallback(async (byUser, fromUser) => {
     try {
-      await apiFetch('/api/messages/read', {
+      await apiFetchJson('/api/messages/read', {
         method: 'POST',
         body: JSON.stringify({ byUser, fromUser }),
       });

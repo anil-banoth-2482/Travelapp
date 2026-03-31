@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const http = require('http');
 const { URL } = require('url');
@@ -12,15 +13,22 @@ const openai = new OpenAI({
 const PORT = Number(process.env.PORT || 4000);
 const APP_TOKEN = process.env.APP_TOKEN || 'local-dev-token';
 
-const DATA_DIR = path.join(__dirname, 'data');
-const POSTS_FILE = path.join(DATA_DIR, 'posts.json');
-const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
-const MEDIA_DIR = path.join(DATA_DIR, 'media');
+let DATA_DIR = path.join(__dirname, 'data');
+let POSTS_FILE = path.join(DATA_DIR, 'posts.json');
+let MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
+let MEDIA_DIR = path.join(DATA_DIR, 'media');
 
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
+
+const setDataPaths = (baseDir) => {
+  DATA_DIR = baseDir;
+  POSTS_FILE = path.join(DATA_DIR, 'posts.json');
+  MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
+  MEDIA_DIR = path.join(DATA_DIR, 'media');
+};
 
 const ensureDataFiles = () => {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -103,7 +111,13 @@ const createdAtMs = (post) => {
 /** Canonical conv key: always alphabetically sorted */
 const convKey = (a, b) => [a, b].sort().join('::');
 
-ensureDataFiles();
+try {
+  ensureDataFiles();
+} catch (err) {
+  console.error('Primary data dir unavailable, falling back to temp dir:', err.message);
+  setDataPaths(path.join(os.tmpdir(), 'social-data'));
+  ensureDataFiles();
+}
 
 const server = http.createServer(async (req, res) => {
   try {

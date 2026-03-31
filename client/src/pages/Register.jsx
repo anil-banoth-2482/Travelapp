@@ -45,7 +45,9 @@ const Register = ({ setIsAuthenticated }) => {
       const users = existing ? JSON.parse(existing) : [];
       users.push(user);
       localStorage.setItem('users', JSON.stringify(users));
-      sessionStorage.setItem('currentUser', JSON.stringify(user));
+      const userJson = JSON.stringify(user);
+      sessionStorage.setItem('currentUser', userJson);
+      localStorage.setItem('currentUser', userJson);
       window.dispatchEvent(new Event('authchange'));
       
       // Reset language setup for the new user

@@ -146,7 +146,9 @@ const Login = ({ setIsAuthenticated }) => {
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       const match = users.find(u => (u.email === identifier || u.profileName === identifier) && u.password === password);
       if (match) {
-        sessionStorage.setItem('currentUser', JSON.stringify(match));
+        const userJson = JSON.stringify(match);
+        sessionStorage.setItem('currentUser', userJson);
+        localStorage.setItem('currentUser', userJson);
         window.dispatchEvent(new Event('authchange'));
         
         // Reset language setup if it's a new session or different user

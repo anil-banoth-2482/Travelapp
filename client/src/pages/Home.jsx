@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import FeedLanguageBar from '../components/FeedLanguageBar';
 import PostCard from '../components/PostCard';
 import { useLanguage } from '../context/LanguageContext';
+import { apiFetch } from '../utils/api';
 
 const Home = () => {
   const { feedPreferences, t } = useLanguage();
@@ -16,7 +17,7 @@ const Home = () => {
   const loadPosts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/posts');
+      const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error('Failed to load posts');
       const json = await res.json();
       const list = Array.isArray(json.posts) ? json.posts : [];

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
+import { apiFetch, resolveApiUrl } from '../utils/api';
 
 /* ─── Demo / synthetic user fallback ──────────────────────────────────── */
 const SYNTHETIC_USERS = {
@@ -113,7 +114,7 @@ const Profile = () => {
     if (!profileName) return;
     setMyPostsLoading(true);
     try {
-      const res = await fetch('/api/posts');
+      const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error();
       const json = await res.json();
       const list = Array.isArray(json.posts) ? json.posts : [];
@@ -136,7 +137,9 @@ const Profile = () => {
     }
     const updatedUser = { ...user, ...editData };
     localStorage.setItem('users', JSON.stringify(users.map(u => u.email === user.email ? updatedUser : u)));
-    sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    const userJson = JSON.stringify(updatedUser);
+    sessionStorage.setItem('currentUser', userJson);
+    localStorage.setItem('currentUser', userJson);
     setUser(updatedUser);
     setIsEditing(false);
     window.dispatchEvent(new Event('authchange'));
@@ -294,10 +297,10 @@ const Profile = () => {
                   {t('profile_all_posts')}
                 </button>
                 {selectedPost.media?.type === 'image' && selectedPost.media?.url && (
-                  <img src={selectedPost.media.url} alt="Post" style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', objectFit: 'cover', marginBottom: '0.9rem' }} />
+                  <img src={resolveApiUrl(selectedPost.media.url)} alt="Post" style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', objectFit: 'cover', marginBottom: '0.9rem' }} />
                 )}
                 {selectedPost.media?.type === 'video' && selectedPost.media?.url && (
-                  <video src={selectedPost.media.url} controls style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', marginBottom: '0.9rem' }} />
+                  <video src={resolveApiUrl(selectedPost.media.url)} controls style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', marginBottom: '0.9rem' }} />
                 )}
                 <div style={{ fontSize: '1rem', lineHeight: 1.6 }}>{selectedPost.description}</div>
               </div>
@@ -305,8 +308,8 @@ const Profile = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                 {myPosts.map(post => (
                   <button key={post.id} type="button" onClick={() => setSearchParams({ view: 'posts', post: post.id })} style={{ border: 'none', padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1/1' }}>
-                    {post.media?.type === 'image' && post.media?.url && <img src={post.media.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-                    {post.media?.type === 'video' && post.media?.url && <video src={post.media.url} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                    {post.media?.type === 'image' && post.media?.url && <img src={resolveApiUrl(post.media.url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                    {post.media?.type === 'video' && post.media?.url && <video src={resolveApiUrl(post.media.url)} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                     {!post.media?.url && <div className="glass" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontWeight: 600 }}>Post</div>}
                   </button>
                 ))}

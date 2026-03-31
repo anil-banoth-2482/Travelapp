@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { resolveApiUrl } from '../utils/api';
 
 /**
  * Reusable post card used in Home and Travel feeds.
@@ -32,7 +33,7 @@ const PostCard = ({ post, children }) => {
     navigate(`/messages?chat=${authorName}`);
   };
 
-  const mediaUrl  = post.media?.url  || '';
+  const mediaUrl  = resolveApiUrl(post.media?.url || '');
   const mediaType = post.media?.type || '';
 
   return (

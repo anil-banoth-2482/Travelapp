@@ -39,7 +39,14 @@ const BellIcon = ({ hasUnread }) => (
 const Navbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
-  const [currentUser, setCurrentUser] = useState(JSON.parse(sessionStorage.getItem('currentUser')));
+  const getStoredUser = () => {
+    const sessionUser = sessionStorage.getItem('currentUser');
+    if (sessionUser) return JSON.parse(sessionUser);
+    const localUser = localStorage.getItem('currentUser');
+    return localUser ? JSON.parse(localUser) : null;
+  };
+
+  const [currentUser, setCurrentUser] = useState(getStoredUser());
   const dropdownRef = useRef(null);
   const notifRef = useRef(null);
   const navigate = useNavigate();
@@ -55,7 +62,7 @@ const Navbar = () => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setShowDropdown(false);
       if (notifRef.current && !notifRef.current.contains(event.target)) setShowNotif(false);
     };
-    const handleAuthChange = () => setCurrentUser(JSON.parse(sessionStorage.getItem('currentUser')));
+    const handleAuthChange = () => setCurrentUser(getStoredUser());
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('authchange', handleAuthChange);
     return () => {
@@ -66,6 +73,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser');
+    localStorage.removeItem('currentUser');
     window.dispatchEvent(new Event('authchange'));
     setShowDropdown(false);
     navigate('/login');

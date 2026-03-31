@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { apiFetch, resolveApiUrl } from '../utils/api';
 
 const Explore = () => {
   const { feedPreferences, t } = useLanguage();
@@ -23,7 +24,7 @@ const Explore = () => {
   const loadPosts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/posts');
+      const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error('Failed to load posts');
       const json = await res.json();
       const list = Array.isArray(json.posts) ? json.posts : [];
@@ -112,7 +113,7 @@ const Explore = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {filteredPosts.map((post) => {
-              const mediaUrl = post.media?.url || '';
+              const mediaUrl = resolveApiUrl(post.media?.url || '');
               const mediaType = post.media?.type || '';
 
               return (

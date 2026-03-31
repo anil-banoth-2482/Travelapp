@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import PostCard from '../components/PostCard';
+import { apiFetch } from '../utils/api';
 
 const Travel = () => {
   const { feedPreferences, t } = useLanguage();
@@ -42,7 +43,7 @@ const Travel = () => {
   const loadPosts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/posts');
+      const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error('Failed to load posts');
       const json = await res.json();
       const list = Array.isArray(json.posts) ? json.posts : [];
@@ -73,9 +74,8 @@ const Travel = () => {
           });
         });
 
-        const res = await fetch('/api/geocode/reverse', {
+        const res = await apiFetch('/api/geocode/reverse', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
         });
 
@@ -151,9 +151,8 @@ const Travel = () => {
 
     (async () => {
       try {
-        const res = await fetch('/api/ai/score-posts', {
+        const res = await apiFetch('/api/ai/score-posts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             posts: unscored.map((p) => ({ 
               id: p.id, 

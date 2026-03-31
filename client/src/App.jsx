@@ -18,17 +18,30 @@ import Travel from './pages/Travel';
 import Messages from './pages/Messages';
 
 function App() {
+  const getStoredUser = React.useCallback(() => {
+    const sessionUser = sessionStorage.getItem('currentUser');
+    if (sessionUser) return sessionUser;
+    const localUser = localStorage.getItem('currentUser');
+    return localUser || null;
+  }, []);
+
   const [isAuthenticated, setIsAuthenticated] = React.useState(
-    () => sessionStorage.getItem('currentUser') !== null
+    () => getStoredUser() !== null
   );
 
   React.useEffect(() => {
+    const stored = localStorage.getItem('currentUser');
+    if (!sessionStorage.getItem('currentUser') && stored) {
+      sessionStorage.setItem('currentUser', stored);
+      window.dispatchEvent(new Event('authchange'));
+    }
+
     const handleAuthChange = () => {
-      setIsAuthenticated(sessionStorage.getItem('currentUser') !== null);
+      setIsAuthenticated(getStoredUser() !== null);
     };
     window.addEventListener('authchange', handleAuthChange);
     return () => window.removeEventListener('authchange', handleAuthChange);
-  }, []);
+  }, [getStoredUser]);
 
   return (
     <LanguageProvider>

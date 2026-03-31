@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
+import { apiFetch, resolveApiUrl } from '../utils/api';
 
 const detectLanguagesFromText = (text) => {
   const t = (text || '').trim();
@@ -95,9 +96,8 @@ const CreatePost = () => {
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
 
-      const res = await fetch('/api/geocode/reverse', {
+      const res = await apiFetch('/api/geocode/reverse', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lat, lon }),
       });
 
@@ -198,9 +198,8 @@ const CreatePost = () => {
       }
 
       const dataUrl = await fileToDataUrl(mediaFile);
-      const uploadRes = await fetch('/api/media', {
+      const uploadRes = await apiFetch('/api/media', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mime: mediaFile.type, dataUrl }),
       });
       if (!uploadRes.ok) {
@@ -208,7 +207,7 @@ const CreatePost = () => {
         throw new Error(err.error || t('error_media_upload_failed'));
       }
       const uploadJson = await uploadRes.json();
-      const mediaUrl = uploadJson.url;
+      const mediaUrl = resolveApiUrl(uploadJson.url);
 
       const newPost = {
         description: desc,
@@ -225,9 +224,8 @@ const CreatePost = () => {
         location: locationPayload,
       };
 
-      const postRes = await fetch('/api/posts', {
+      const postRes = await apiFetch('/api/posts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newPost),
       });
       if (!postRes.ok) {
