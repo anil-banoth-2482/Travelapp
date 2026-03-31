@@ -1,0 +1,5 @@
+==> 2026-03-30 18:35:29 <==
+# cmd: C:\ProgramData\anaconda3\Scripts\conda-script.py create -p .\server\env -c conda-forge nodejs=20 -y
+# conda version: 25.11.0
++conda-forge/win-64::nodejs-20.20.2-h80290e7_0
+# update specs: ['nodejs=20']
