@@ -122,7 +122,7 @@ const Navbar = () => {
       borderRadius: '0 0 20px 20px',
       margin: isMobile ? '0 0.5rem' : '0 1.5rem',
       boxSizing: 'border-box',
-      overflow: 'hidden',
+      // NOTE: do NOT set overflow:hidden here — it clips the dropdowns
     }}>
       {/* Logo */}
       <Link to="/" style={{ textDecoration: 'none' }}>

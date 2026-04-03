@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
@@ -6,38 +6,31 @@ import { useAuth } from '../context/AuthContext';
 import { resolveApiUrl } from '../utils/api';
 
 const HomeIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
     <polyline points="9 22 9 12 15 12 15 22"/>
   </svg>
 );
 const TravelIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
   </svg>
 );
 const PlusIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
 const MessageIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
   </svg>
 );
 const ProfileIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
     <circle cx="12" cy="7" r="4"/>
-  </svg>
-);
-const LogoutIcon = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-    <polyline points="16 17 21 12 16 7"/>
-    <line x1="21" y1="12" x2="9" y2="12"/>
   </svg>
 );
 
@@ -48,19 +41,38 @@ const BottomNav = () => {
   const { getTotalUnread } = useMessages();
   const { user, logout } = useAuth();
   const totalUnread = getTotalUnread();
+  const [showSheet, setShowSheet] = useState(false);
+  const sheetRef = useRef(null);
 
-  const [showProfileSheet, setShowProfileSheet] = useState(false);
+  // Close sheet on back/route change
+  useEffect(() => { setShowSheet(false); }, [location.pathname]);
 
-  // Hide the nav when a chat is open so it doesn't cover the input panel
+  // Close sheet when clicking outside
+  useEffect(() => {
+    if (!showSheet) return;
+    const handler = (e) => {
+      if (sheetRef.current && !sheetRef.current.contains(e.target)) {
+        setShowSheet(false);
+      }
+    };
+    // slight delay so the tap that opened it doesn't immediately close it
+    const timer = setTimeout(() => document.addEventListener('touchstart', handler), 100);
+    return () => { clearTimeout(timer); document.removeEventListener('touchstart', handler); };
+  }, [showSheet]);
+
+  // Hide the nav when a chat is open
   const searchParams = new URLSearchParams(location.search);
   const chatOpen = location.pathname === '/messages' && !!searchParams.get('chat');
   if (chatOpen) return null;
 
   const handleLogout = async () => {
-    setShowProfileSheet(false);
+    setShowSheet(false);
     await logout();
     navigate('/login');
   };
+
+  const avatarSrc = resolveApiUrl(user?.avatarUrl) ||
+    `https://i.pravatar.cc/150?img=${Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1}`;
 
   const navItems = [
     { Icon: HomeIcon,    label: 'Home',     path: '/home' },
@@ -71,112 +83,117 @@ const BottomNav = () => {
 
   const isProfileActive = location.pathname === '/profile';
 
+  const navStyle = {
+    position: 'fixed', left: 0, right: 0, bottom: 0,
+    display: 'flex', justifyContent: 'space-around', alignItems: 'center',
+    padding: '0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+    background: 'rgba(8,12,24,0.96)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+    zIndex: 300,
+  };
+
   return (
     <>
-      {/* Profile action sheet overlay */}
-      {showProfileSheet && (
+      {/* ── Dark overlay when sheet is open ── */}
+      {showSheet && (
         <div
-          onClick={() => setShowProfileSheet(false)}
+          onClick={() => setShowSheet(false)}
           style={{
-            position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(4px)',
+            position: 'fixed', inset: 0, zIndex: 290,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
           }}
         />
       )}
 
-      {/* Profile slide-up sheet */}
-      <div style={{
-        position: 'fixed',
-        bottom: showProfileSheet ? '64px' : '-300px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100% - 2rem)',
-        maxWidth: '420px',
-        background: 'rgba(8,12,24,0.98)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '20px 20px 0 0',
-        zIndex: 201,
-        transition: 'bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        overflow: 'hidden',
-        boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
-      }}>
-        {/* Sheet handle bar */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0 0.25rem' }}>
-          <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.15)' }} />
+      {/* ── Profile slide-up sheet ── */}
+      <div
+        ref={sheetRef}
+        style={{
+          position: 'fixed',
+          left: 0, right: 0,
+          bottom: 0,
+          // slides UP over the bottom nav when open
+          transform: showSheet ? 'translateY(0)' : 'translateY(110%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          background: 'rgba(8,12,24,0.99)',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '24px 24px 0 0',
+          zIndex: 400,
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)',
+        }}
+      >
+        {/* Handle bar */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0 0.4rem' }}>
+          <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.2)' }} />
         </div>
 
-        {/* User info header */}
-        <div style={{ padding: '0.75rem 1.25rem 1rem', display: 'flex', alignItems: 'center', gap: '0.85rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* User info */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.9rem',
+          padding: '0.6rem 1.4rem 1rem',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+        }}>
           <img
-            src={resolveApiUrl(user?.avatarUrl) || `https://i.pravatar.cc/150?img=${Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1}`}
-            alt="Profile"
-            style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)' }}
+            src={avatarSrc}
+            alt="profile"
             onError={e => { e.currentTarget.src = `https://i.pravatar.cc/150?img=${Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1}`; }}
+            style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2.5px solid var(--saffron, #f97316)', flexShrink: 0 }}
           />
           <div>
-            <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{user?.name || user?.username || 'User'}</div>
-            {user?.username && <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>@{user.username}</div>}
+            <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>{user?.name || user?.username || 'User'}</div>
+            {user?.username && <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)', marginTop: '2px' }}>@{user.username}</div>}
           </div>
         </div>
 
-        {/* Menu items */}
-        <div style={{ padding: '0.5rem' }}>
-          <Link
-            to="/profile"
-            onClick={() => setShowProfileSheet(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1rem', borderRadius: '12px', color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}
+        {/* Menu rows */}
+        <div style={{ padding: '0.5rem 0.75rem' }}>
+          {/* View Profile */}
+          <div
+            onClick={() => { setShowSheet(false); navigate('/profile'); }}
+            style={sheetRowStyle}
           >
-            <ProfileIcon />
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
             View Profile
-          </Link>
-          <Link
-            to="/profile?view=posts"
-            onClick={() => setShowProfileSheet(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1rem', borderRadius: '12px', color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}
+          </div>
+
+          {/* My Posts */}
+          <div
+            onClick={() => { setShowSheet(false); navigate('/profile?view=posts'); }}
+            style={sheetRowStyle}
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
             </svg>
             My Posts
-          </Link>
+          </div>
 
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '0.25rem 0' }} />
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '0.3rem 0.5rem' }} />
 
-          <button
+          {/* Sign out */}
+          <div
             onClick={handleLogout}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.75rem',
-              width: '100%', padding: '0.85rem 1rem',
-              borderRadius: '12px', background: 'transparent',
-              border: 'none', color: '#f87171',
-              fontSize: '0.9rem', fontWeight: 600,
-              cursor: 'pointer', textAlign: 'left',
-            }}
+            style={{ ...sheetRowStyle, color: '#f87171' }}
           >
-            <LogoutIcon />
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.9 }}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
             Sign out
-          </button>
+          </div>
         </div>
-
-        {/* Bottom safe area padding */}
-        <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
       </div>
 
-      {/* Bottom Nav Bar */}
-      <nav
-        aria-label="bottom navigation"
-        style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0,
-          display: 'flex', justifyContent: 'space-around', alignItems: 'center',
-          padding: '0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom))',
-          background: 'rgba(8,12,24,0.96)',
-          backdropFilter: 'blur(20px)',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          zIndex: 60,
-        }}
-      >
+      {/* ── Bottom Navigation Bar ── */}
+      <nav aria-label="bottom navigation" style={navStyle}>
         {navItems.map((it, i) => {
           const isActive = location.pathname === it.path;
           return (
@@ -184,7 +201,7 @@ const BottomNav = () => {
               key={i}
               to={it.path}
               style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
                 textDecoration: 'none',
                 color: isActive ? 'var(--saffron, #f97316)' : 'rgba(255,255,255,0.4)',
                 position: 'relative',
@@ -195,7 +212,7 @@ const BottomNav = () => {
                 transition: 'all 0.2s',
               }}
             >
-              <span style={{ position: 'relative', color: it.special ? 'white' : 'inherit' }}>
+              <span style={{ position: 'relative', color: it.special ? 'white' : 'inherit', display: 'flex' }}>
                 <it.Icon />
                 {it.badge > 0 && (
                   <span style={{
@@ -210,29 +227,44 @@ const BottomNav = () => {
                   </span>
                 )}
               </span>
-              <span style={{ fontSize: '0.65rem', fontWeight: isActive ? 700 : 400, color: it.special ? 'white' : 'inherit' }}>
-                {t(it.label.toLowerCase())}
+              <span style={{ fontSize: '0.62rem', fontWeight: isActive ? 700 : 400, color: it.special ? 'white' : 'inherit', lineHeight: 1 }}>
+                {it.label}
               </span>
             </Link>
           );
         })}
 
-        {/* Profile tab — opens bottom sheet instead of navigating */}
+        {/* Profile button — opens sheet */}
         <button
-          onClick={() => setShowProfileSheet(v => !v)}
+          id="mobile-profile-btn"
+          onClick={() => setShowSheet(v => !v)}
           style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            color: isProfileActive || showProfileSheet ? 'var(--saffron, #f97316)' : 'rgba(255,255,255,0.4)',
+            color: isProfileActive || showSheet ? 'var(--saffron, #f97316)' : 'rgba(255,255,255,0.4)',
             padding: '4px 12px',
             borderRadius: '10px',
-            transition: 'all 0.2s',
+            transition: 'color 0.2s',
+            minWidth: '48px',
           }}
         >
-          <span style={{ position: 'relative' }}>
-            <ProfileIcon />
-            {/* Active dot indicator */}
-            {showProfileSheet && (
+          <span style={{ display: 'flex', position: 'relative' }}>
+            {/* Show avatar thumbnail if available */}
+            {user?.avatarUrl ? (
+              <img
+                src={avatarSrc}
+                alt="me"
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+                style={{
+                  width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover',
+                  border: `2px solid ${isProfileActive || showSheet ? 'var(--saffron, #f97316)' : 'rgba(255,255,255,0.3)'}`,
+                  transition: 'border-color 0.2s',
+                }}
+              />
+            ) : (
+              <ProfileIcon />
+            )}
+            {showSheet && (
               <span style={{
                 position: 'absolute', bottom: '-3px', left: '50%', transform: 'translateX(-50%)',
                 width: '4px', height: '4px', borderRadius: '50%',
@@ -240,13 +272,27 @@ const BottomNav = () => {
               }} />
             )}
           </span>
-          <span style={{ fontSize: '0.65rem', fontWeight: isProfileActive || showProfileSheet ? 700 : 400 }}>
+          <span style={{ fontSize: '0.62rem', fontWeight: isProfileActive || showSheet ? 700 : 400, lineHeight: 1 }}>
             Profile
           </span>
         </button>
       </nav>
     </>
   );
+};
+
+const sheetRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.85rem',
+  padding: '0.9rem 0.75rem',
+  borderRadius: '12px',
+  color: '#fff',
+  fontSize: '0.95rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  transition: 'background 0.15s',
+  WebkitTapHighlightColor: 'transparent',
 };
 
 export default BottomNav;
