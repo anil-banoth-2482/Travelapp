@@ -282,33 +282,31 @@ const Navbar = () => {
           )}
         </div>
 
-        {/* Language selector — hidden on mobile */}
-        {!isMobile && (
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            title="Switch Language"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: 'var(--text-secondary)',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              padding: '0 0.9rem',
-              borderRadius: '20px',
-              outline: 'none',
-              appearance: 'none',
-              WebkitAppearance: 'none',
-              height: '40px',
-              textAlign: 'center',
-            }}
-          >
-            {availableLanguages.map((lang) => (
-              <option key={lang.code} value={lang.code} style={{ color: '#000' }}>{lang.native}</option>
-            ))}
-          </select>
-        )}
+        {/* Language selector */}
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          title="Switch Language"
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: 'var(--text-secondary)',
+            fontSize: isMobile ? '0.75rem' : '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: isMobile ? '0 0.4rem' : '0 0.9rem',
+            borderRadius: '20px',
+            outline: 'none',
+            appearance: 'none',
+            WebkitAppearance: 'none',
+            height: isMobile ? '34px' : '40px',
+            textAlign: 'center',
+          }}
+        >
+          {availableLanguages.map((lang) => (
+            <option key={lang.code} value={lang.code} style={{ color: '#000' }}>{isMobile ? lang.code.toUpperCase() : lang.native}</option>
+          ))}
+        </select>
 
         {/* Profile avatar + dropdown — hidden on mobile (use BottomNav profile link instead) */}
         {!isMobile && (
