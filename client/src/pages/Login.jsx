@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import cultureImgLocal from '../assets/Gemini_Generated_Image_ekus7aekus7aekus.png';
+import logoImg from '../assets/logo.png';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { apiFetch, setAuthToken } from '../utils/api';
@@ -255,7 +256,7 @@ const Login = () => {
         {/* Mobile Top Icon */}
         {isMobile && (
             <img 
-              src="/src/assets/logo.png" 
+              src={logoImg}
               alt="App Logo" 
               style={{ width: '80px', height: '80px', objectFit: 'contain', marginBottom: '2rem', animation: 'slideInUp 0.6s ease-out forwards' }} 
             />
