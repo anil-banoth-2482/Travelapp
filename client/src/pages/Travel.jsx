@@ -9,8 +9,6 @@ const Travel = () => {
   const [selectedState, setSelectedState] = useState('all');
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [locating, setLocating] = useState(false);
-
   const { user } = useAuth();
 
   const states = useMemo(
@@ -52,63 +50,6 @@ const Travel = () => {
 
   useEffect(() => {
     loadPosts();
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const stateNameToSlug = {
-      'andhra pradesh': 'andhra-pradesh',
-      'telangana': 'telangana',
-      'tamil nadu': 'tamil-nadu',
-      'kerala': 'kerala',
-      'karnataka': 'karnataka',
-      'maharashtra': 'maharashtra',
-      'rajasthan': 'rajasthan',
-      'uttar pradesh': 'uttar-pradesh',
-      'goa': 'goa',
-      'himachal pradesh': 'himachal-pradesh',
-      'uttarakhand': 'uttarakhand',
-      'west bengal': 'west-bengal',
-      'gujarat': 'gujarat',
-      'punjab': 'punjab',
-      'delhi': 'delhi',
-      'national capital territory of delhi': 'delhi',
-    };
-
-    const autoLocate = async () => {
-      if (!navigator.geolocation) return;
-      setLocating(true);
-      try {
-        const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: false,
-            timeout: 10000,
-            maximumAge: 300000,
-          });
-        });
-
-        const { latitude, longitude } = pos.coords;
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-          { headers: { 'Accept-Language': 'en' } },
-        );
-        if (!res.ok) throw new Error('Nominatim failed');
-        const json = await res.json();
-        const stateName = (json.address?.state || '').toLowerCase();
-        const slug = stateNameToSlug[stateName];
-        if (mounted && slug) {
-          setSelectedState(slug);
-        }
-      } catch (err) {
-        console.warn('Geolocation fallback:', err.message);
-      } finally {
-        if (mounted) setLocating(false);
-      }
-    };
-
-    autoLocate();
-    return () => { mounted = false; };
   }, []);
 
   // Tier badge derived from tourism score (0-100)
@@ -187,14 +128,13 @@ const Travel = () => {
         </p>
 
         <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <select value={selectedState} onChange={(e) => setSelectedState(e.target.value)} style={selectStyle} disabled={locating}>
+          <select value={selectedState} onChange={(e) => setSelectedState(e.target.value)} style={selectStyle}>
             {states.map((s) => (
               <option key={s.value} value={s.value} style={{ color: '#000' }}>
                 {s.labelKey ? t(s.labelKey) : s.label}
               </option>
             ))}
           </select>
-          {locating && <div className="spinner" style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--saffron)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
         </div>
       </div>
 
