@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage, availableLanguages } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, resolveApiUrl } from '../utils/api';
 
 
 // Generates a display name from username as fallback
@@ -314,10 +314,11 @@ const Navbar = () => {
         {!isMobile && (
           <div ref={dropdownRef} style={{ position: 'relative' }}>
             <img
-              src={user?.avatarUrl || 'https://i.pravatar.cc/150?img=1'}
+              src={resolveApiUrl(user?.avatarUrl) || 'https://i.pravatar.cc/150?img=' + (Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1)}
               alt="Profile"
               style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', cursor: 'pointer', transition: 'all 0.2s' }}
               onClick={() => setShowDropdown(!showDropdown)}
+              onError={e => { e.currentTarget.src = 'https://i.pravatar.cc/150?img=' + (Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1); }}
             />
 
             {showDropdown && (

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
 import { useAuth } from '../context/AuthContext';
+import { resolveApiUrl } from '../utils/api';
 
 const HomeIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -108,9 +109,10 @@ const BottomNav = () => {
         {/* User info header */}
         <div style={{ padding: '0.75rem 1.25rem 1rem', display: 'flex', alignItems: 'center', gap: '0.85rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <img
-            src={user?.avatarUrl || `https://i.pravatar.cc/150?img=1`}
+            src={resolveApiUrl(user?.avatarUrl) || `https://i.pravatar.cc/150?img=${Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1}`}
             alt="Profile"
             style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)' }}
+            onError={e => { e.currentTarget.src = `https://i.pravatar.cc/150?img=${Math.abs((user?.username?.charCodeAt(0) || 1)) % 70 + 1}`; }}
           />
           <div>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{user?.name || user?.username || 'User'}</div>
