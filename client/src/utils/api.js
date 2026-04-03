@@ -17,7 +17,8 @@ export const getAuthToken = () => authToken;
 
 export const resolveApiUrl = (pathOrUrl) => {
   if (!pathOrUrl) return '';
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  // Already a full URL — return as-is (handles http/https AND data: base64 URLs)
+  if (/^(https?|data):\/\//i.test(pathOrUrl)) return pathOrUrl;
   if (!API_BASE) return pathOrUrl;
   if (pathOrUrl.startsWith('/')) return `${API_BASE}${pathOrUrl}`;
   return `${API_BASE}/${pathOrUrl}`;

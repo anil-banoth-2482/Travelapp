@@ -120,7 +120,7 @@ const Navbar = () => {
       top: 0,
       zIndex: 100,
       borderRadius: '0 0 20px 20px',
-      margin: isMobile ? '0 0.5rem' : '0 1.5rem',
+      margin: isMobile ? '0' : '0 1.5rem',
       boxSizing: 'border-box',
       // NOTE: do NOT set overflow:hidden here — it clips the dropdowns
     }}>

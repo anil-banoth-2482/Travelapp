@@ -30,8 +30,13 @@ const PostCard = ({ post, children }) => {
     navigate(`/messages?chat=${authorName}`);
   };
 
-  const mediaUrl  = resolveApiUrl(post.imageUrl || post.media?.url || '');
-  const mediaType = post.media?.type || (mediaUrl ? 'image' : '');
+  const rawMediaUrl = post.imageUrl || post.media?.url || '';
+  const mediaUrl = resolveApiUrl(rawMediaUrl);
+  // Detect type from: explicit field > data URI prefix > fallback to 'image' if URL exists
+  const mediaType = post.media?.type
+    || (rawMediaUrl.startsWith('data:video') ? 'video'
+      : rawMediaUrl.startsWith('data:image') ? 'image'
+      : mediaUrl ? 'image' : '');
 
   return (
     <div
