@@ -12,16 +12,24 @@ const searchRoutes = require('./routes/search');
 const createApp = () => {
   const app = express();
 
+  // Support comma-separated CLIENT_ORIGIN for multiple allowed origins
+  const extraOrigins = (process.env.CLIENT_ORIGIN || '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
   const allowedOrigins = new Set([
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    process.env.CLIENT_ORIGIN,
-  ].filter(Boolean));
+    ...extraOrigins,
+  ]);
 
   app.use(cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // server-to-server / curl
       if (allowedOrigins.has(origin)) return cb(null, true);
+      // Allow any Vercel preview deployment automatically
+      if (origin.endsWith('.vercel.app')) return cb(null, true);
       return cb(null, false);
     },
     credentials: true,
