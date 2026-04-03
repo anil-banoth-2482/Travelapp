@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TravelIndia — Pitch Deck</title>
+  <style>
+    :root {
+      --bg: #060812;
+      --card: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.70);
+      --accent: #f97316;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1000px 600px at 20% 0%, rgba(249,115,22,0.20), transparent 60%),
+                  radial-gradient(900px 500px at 90% 20%, rgba(99,102,241,0.18), transparent 65%),
+                  var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      line-height: 1.4;
+    }
+    .deck {
+      max-width: 1050px;
+      margin: 0 auto;
+      padding: 28px 18px;
+    }
+    .slide {
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 20px;
+      padding: 26px 26px;
+      margin: 0 auto 18px;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+    }
+    .slide h1, .slide h2 {
+      margin: 0 0 10px;
+      letter-spacing: -0.2px;
+    }
+    .slide h1 { font-size: 34px; }
+    .slide h2 { font-size: 26px; }
+    .kicker {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .accent { color: var(--accent); font-weight: 800; }
+    .cols {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: start;
+    }
+    ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: var(--text);
+    }
+    li { margin: 6px 0; }
+    .box {
+      border: 1px dashed rgba(255,255,255,0.22);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .notes {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.78);
+      font-size: 13px;
+    }
+    .tag {
+      display: inline-block;
+      border: 1px solid rgba(249,115,22,0.35);
+      background: rgba(249,115,22,0.10);
+      color: rgba(255,255,255,0.92);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+      margin-top: 6px;
+    }
+    .footer {
+      margin-top: 12px;
+      color: rgba(255,255,255,0.55);
+      font-size: 12px;
+    }
+
+    /* Print: one slide per page */
+    @media print {
+      body { background: white; color: #111; }
+      .deck { max-width: none; padding: 0; }
+      .slide {
+        border-radius: 0;
+        box-shadow: none;
+        background: white;
+        border: 0;
+        margin: 0;
+        page-break-after: always;
+        break-after: page;
+        padding: 32px;
+      }
+      .box { border-color: #bbb; background: #fafafa; color: #333; }
+      .notes { color: #333; border-top-color: #ddd; }
+      .tag { border-color: #f97316; background: #fff3e8; color: #111; }
+      .footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+
+    <section class="slide">
+      <div class="kicker">Slide 1</div>
+      <h1><span class="accent">TravelIndia</span> — Multilingual Travel Social Network for India</h1>
+      <div class="kicker">Discover places through real people, in your language.</div>
+      <div>
+        <span class="tag">AI-ranked Travel Feed</span>
+        <span class="tag">Multi-language UI</span>
+        <span class="tag">Realtime Messaging</span>
+      </div>
+      <div class="cols" style="margin-top:14px;">
+        <div>
+          <ul>
+            <li>Social + travel discovery feed</li>
+            <li>Language-first UX for Indian audiences</li>
+            <li>AI “tourism score” to rank travel-worthy posts</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “TravelIndia helps people discover travel-worthy posts across India, even if they don’t speak English.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Hero collage: Home + Travel + Messages screenshots</div>
+          <div class="footer">(Replace with real screenshots from your deployed app.)</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 2</div>
+      <h2>The Problem: Travel discovery is noisy and language-limited</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Great travel content gets buried inside generic social feeds</li>
+            <li>Many products surface content primarily in English</li>
+            <li>After seeing a post, users still lack context and trust signals</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “People want authentic travel recommendations, but they want it in the language they’re comfortable with.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Split graphic: noisy feed vs curated travel feed</div>
+          <div>Optional stat callout: “India has 22+ official languages” (context)</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 3</div>
+      <h2>The Solution: Travel-first social app with language-first UX</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Familiar social loop: posts, profiles, likes, comments</li>
+            <li>Dedicated <strong>Travel</strong> feed with state-based filtering</li>
+            <li>User-controlled language preferences; UI adapts instantly</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “We keep the learning curve low: it feels like Instagram, but travel discovery is the core.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Simple flow diagram:</div>
+          <div>1) Choose language → 2) Browse Travel feed → 3) Message/engage</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 4</div>
+      <h2>Product Demo: What users can do today</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Create posts with images + description + state tag</li>
+            <li>Explore travel posts ranked by <strong>tourism score</strong></li>
+            <li>Realtime messaging + notifications</li>
+            <li>Profile: avatar, username, preferences</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “These are real screens in the prototype; this is not just a concept.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>4-screenshot grid: Create Post, Travel Feed, Messages, Profile</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 5</div>
+      <h2>Key Feature: Multilingual Experience</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Language selector in the top navbar (mobile-friendly)</li>
+            <li>Supports multiple Indian languages</li>
+            <li>Consistent UX across Home / Travel / Messages / Profile</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “We reduce friction for non-English users and improve retention by meeting users where they are.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Before/after screenshots: same page in English vs another language</div>
+          <div>Highlight the language dropdown</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 6</div>
+      <h2>Key Feature: AI Tourism Scoring</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Each post gets a <strong>tourism score (0–100)</strong></li>
+            <li>Travel feed sorts by score first, then freshness</li>
+            <li>Graceful fallback if AI is unavailable</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “This makes discovery feel curated without heavy manual moderation.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Score meter chart + example post cards with scores</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 7</div>
+      <h2>Realtime Messaging & Engagement</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Direct messaging (realtime)</li>
+            <li>Unread counts + notifications</li>
+            <li>Turns discovery into planning and community</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “Travel is social. Messaging turns ‘I saw a post’ into ‘I planned a trip’.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Messages screenshot + notification bell</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 8</div>
+      <h2>Technical Architecture</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Frontend: React (Vite)</li>
+            <li>Backend: Node.js + Express</li>
+            <li>Database: MongoDB (Mongoose)</li>
+            <li>Auth: JWT access token + HttpOnly refresh cookie</li>
+            <li>Realtime: Socket.IO</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “This is a production-style foundation: secure sessions, persistent DB, and real-time events.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Diagram:</div>
+          <div>React Client ↔ Express API ↔ MongoDB</div>
+          <div>Socket.IO channel for messages</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 9</div>
+      <h2>Differentiation: Why we win</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Travel-focused surfacing (not a generic feed)</li>
+            <li>Multilingual UX designed for India</li>
+            <li>AI ranking improves content quality</li>
+            <li>Realtime messaging keeps users inside the platform</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “We combine three levers—language, travel intent, and AI ranking—to stand out.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>2×2 matrix:</div>
+          <div>Social vs Travel-first</div>
+          <div>English-only vs Multilingual</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 10</div>
+      <h2>Target Users & Use Cases</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li>Students and young travelers exploring low-budget trips</li>
+            <li>Families planning state-wise travel</li>
+            <li>Local guides / micro-creators sharing hidden gems</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “We start with India-first travel discovery; the model can expand later.”</div>
+        </div>
+        <div class="box">
+          <strong>Use cases</strong>
+          <div>“Find top travel posts in Telangana”</div>
+          <div>“Message the poster for budget + itinerary”</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 11</div>
+      <h2>Roadmap</h2>
+      <div class="cols">
+        <div>
+          <div class="kicker"><strong>Now (done)</strong></div>
+          <ul>
+            <li>Auth + profiles + posts</li>
+            <li>Travel feed + AI scoring</li>
+            <li>Messaging + notifications</li>
+          </ul>
+          <div class="kicker" style="margin-top:10px;"><strong>Next (4–8 weeks)</strong></div>
+          <ul>
+            <li>Better search + hashtags</li>
+            <li>Saved places / collections</li>
+            <li>Reporting & moderation tools</li>
+            <li>Creator stats (basic analytics)</li>
+          </ul>
+          <div class="notes"><strong>Speaker notes:</strong> “The prototype proves the core loop; roadmap focuses on retention and safety.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>3-phase timeline: Now → Next → Later</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Slide 12</div>
+      <h2>Ask / Closing</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><strong>Hackathon / college demo ask:</strong> acceptance to present + feedback + mentorship</li>
+            <li><strong>Funding-style ask:</strong> support to run a pilot and improve retention metrics</li>
+          </ul>
+          <div style="margin-top:10px;"><strong>Closing line:</strong> “TravelIndia: discover India, in your language.”</div>
+          <div class="notes"><strong>Speaker notes:</strong> “End with a quick live demo: change language → open Travel feed → message a user.”</div>
+        </div>
+        <div class="box">
+          <strong>Visual placeholder</strong>
+          <div>Logo + QR code to deployed frontend</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

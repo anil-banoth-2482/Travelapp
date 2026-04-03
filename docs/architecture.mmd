@@ -1,0 +1,70 @@
+%% TravelIndia — High-level Architecture (Mermaid)
+%% Paste this into Mermaid Live Editor, GitHub Markdown, or Canva (if supported).
+
+flowchart LR
+  %% High-level architecture: TravelIndia
+
+  subgraph Edge[Delivery]
+    CDN[Static Hosting/CDN\n(Frontend deploy)]
+  end
+
+  subgraph Client[Client (Web / Mobile Web)]
+    UI[React UI (Vite)]
+    Lang[LanguageContext + Locales\n(EN/HI/TE/KN/PA/BN…)]
+    AuthC[AuthContext\n(access token in-memory)]
+    MsgC[MessagesContext\n(Socket + API)]
+  end
+
+  subgraph Backend[Backend (Node.js + Express)]
+    API[REST API\n/api/*]
+    AuthS[Auth Service\nJWT access + HttpOnly refresh cookie]
+    UserS[Users Service\nprofiles + follow]
+    PostS[Posts Service\ncreate/feed/likes + AI tourism score]
+    MsgS[Messages Service\nthreads + unread/read]
+    Sock[Socket.IO Gateway\nrealtime messaging]
+  end
+
+  subgraph Data[Data Layer]
+    Mongo[(MongoDB)]
+    Media[Media Storage\n(local / cloud)]
+  end
+
+  subgraph External[External Services (optional)]
+    OpenAI[OpenAI API\nTourism score]
+  end
+
+  %% Delivery
+  CDN --> UI
+
+  %% Client composition
+  UI --> Lang
+  UI --> AuthC
+  UI --> MsgC
+
+  %% API calls
+  UI -- "fetch (credentials: include)" --> API
+  API --> AuthS
+  API --> UserS
+  API --> PostS
+  API --> MsgS
+
+  %% Auth
+  AuthS -->|Set refresh cookie| UI
+  AuthS -->|Issue access token| UI
+
+  %% Data persistence
+  AuthS --> Mongo
+  UserS --> Mongo
+  PostS --> Mongo
+  MsgS --> Mongo
+  PostS --> Media
+
+  %% AI scoring
+  PostS -- "score request" --> OpenAI
+  OpenAI -- "score (0–100)" --> PostS
+
+  %% Realtime messaging
+  MsgC -- "Socket handshake (Bearer token)" --> Sock
+  Sock <--> MsgS
+  Sock --> Mongo
+  Sock -- "new_message + presence" --> MsgC
