@@ -1,4 +1,7 @@
-const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+// Use VITE_API_BASE if set, otherwise fall back to the Railway backend so that
+// images/media resolve correctly in production builds and on mobile devices.
+const FALLBACK_API = 'https://travelapp-production-a035.up.railway.app';
+const API_BASE = (import.meta.env.VITE_API_BASE || FALLBACK_API).replace(/\/$/, '');
 const APP_TOKEN = import.meta.env.VITE_APP_TOKEN || 'local-dev-token';
 let authToken = '';
 

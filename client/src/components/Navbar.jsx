@@ -37,6 +37,7 @@ const BellIcon = ({ hasUnread }) => (
 const Navbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const { user, logout } = useAuth();
   const dropdownRef = useRef(null);
   const notifRef = useRef(null);
@@ -82,6 +83,12 @@ const Navbar = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     setShowDropdown(false);
@@ -108,12 +115,14 @@ const Navbar = () => {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '0.85rem 2rem',
+      padding: isMobile ? '0.65rem 1rem' : '0.85rem 2rem',
       position: 'sticky',
       top: 0,
       zIndex: 100,
       borderRadius: '0 0 20px 20px',
-      margin: '0 1.5rem',
+      margin: isMobile ? '0 0.5rem' : '0 1.5rem',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
       {/* Logo */}
       <Link to="/" style={{ textDecoration: 'none' }}>
@@ -122,30 +131,32 @@ const Navbar = () => {
         </h1>
       </Link>
 
-      {/* Search */}
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '500px', margin: '0 2rem' }}>
-        <div style={{
-          ...glass,
-          width: '100%',
-          padding: '0.5rem 1.25rem',
-          borderRadius: '30px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            type="text"
-            placeholder={t('search_placeholder')}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }}
-          />
+      {/* Search — hidden on mobile to save space */}
+      {!isMobile && (
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '500px', margin: '0 2rem' }}>
+          <div style={{
+            ...glass,
+            width: '100%',
+            padding: '0.5rem 1.25rem',
+            borderRadius: '30px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder={t('search_placeholder')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Right side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.4rem' : '0.75rem', flexShrink: 0 }}>
 
         {/* Notification Bell */}
         <div ref={notifRef} style={{ position: 'relative' }}>
@@ -184,10 +195,12 @@ const Navbar = () => {
           {showNotif && (
             <div style={{
               ...glass,
-              position: 'absolute',
-              top: 'calc(100% + 10px)',
-              right: '-10px',
-              width: '340px',
+              position: 'fixed',
+              top: isMobile ? '70px' : undefined,
+              ...(!isMobile ? { position: 'absolute', top: 'calc(100% + 10px)' } : {}),
+              right: isMobile ? '8px' : '-10px',
+              width: isMobile ? 'calc(100vw - 16px)' : '340px',
+              maxWidth: '400px',
               display: 'flex',
               flexDirection: 'column',
               zIndex: 1000,
@@ -269,62 +282,66 @@ const Navbar = () => {
           )}
         </div>
 
-        {/* Language selector */}
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          title="Switch Language"
-          style={{
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            color: 'var(--text-secondary)',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            padding: '0 0.9rem',
-            borderRadius: '20px',
-            outline: 'none',
-            appearance: 'none',
-            WebkitAppearance: 'none',
-            height: '40px',
-            textAlign: 'center',
-          }}
-        >
-          {availableLanguages.map((lang) => (
-            <option key={lang.code} value={lang.code} style={{ color: '#000' }}>{lang.native}</option>
-          ))}
-        </select>
+        {/* Language selector — hidden on mobile */}
+        {!isMobile && (
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            title="Switch Language"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '0 0.9rem',
+              borderRadius: '20px',
+              outline: 'none',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              height: '40px',
+              textAlign: 'center',
+            }}
+          >
+            {availableLanguages.map((lang) => (
+              <option key={lang.code} value={lang.code} style={{ color: '#000' }}>{lang.native}</option>
+            ))}
+          </select>
+        )}
 
-        {/* Profile avatar + dropdown */}
-        <div ref={dropdownRef} style={{ position: 'relative' }}>
-          <img
-            src={user?.avatarUrl || 'https://i.pravatar.cc/150?img=1'}
-            alt="Profile"
-            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', cursor: 'pointer', transition: 'all 0.2s' }}
-            onClick={() => setShowDropdown(!showDropdown)}
-          />
+        {/* Profile avatar + dropdown — hidden on mobile (use BottomNav profile link instead) */}
+        {!isMobile && (
+          <div ref={dropdownRef} style={{ position: 'relative' }}>
+            <img
+              src={user?.avatarUrl || 'https://i.pravatar.cc/150?img=1'}
+              alt="Profile"
+              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', cursor: 'pointer', transition: 'all 0.2s' }}
+              onClick={() => setShowDropdown(!showDropdown)}
+            />
 
-          {showDropdown && (
-            <div style={{ ...glass, position: 'absolute', top: 'calc(100% + 10px)', right: 0, minWidth: '180px', padding: '0.4rem', display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 1000, background: 'rgba(8,12,24,0.98)', borderRadius: '14px' }}>
-              <Link to="/profile" style={dropItemStyle} onClick={() => setShowDropdown(false)}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                View Profile
-              </Link>
-              <Link to="/profile?view=posts" style={dropItemStyle} onClick={() => setShowDropdown(false)}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                My Posts
-              </Link>
-              <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '2px 0' }} />
-              <button onClick={handleLogout} style={{ ...dropItemStyle, color: '#f87171', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
+            {showDropdown && (
+              <div style={{ ...glass, position: 'absolute', top: 'calc(100% + 10px)', right: 0, minWidth: '180px', padding: '0.4rem', display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 1000, background: 'rgba(8,12,24,0.98)', borderRadius: '14px' }}>
+                <Link to="/profile" style={dropItemStyle} onClick={() => setShowDropdown(false)}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  View Profile
+                </Link>
+                <Link to="/profile?view=posts" style={dropItemStyle} onClick={() => setShowDropdown(false)}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  My Posts
+                </Link>
+                <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '2px 0' }} />
+                <button onClick={handleLogout} style={{ ...dropItemStyle, color: '#f87171', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', width: '100%' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </nav>
   );
