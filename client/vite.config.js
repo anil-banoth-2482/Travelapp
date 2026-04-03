@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 const APP_TOKEN = 'local-dev-token'
 
-const BACKENDURL = "http://localhost:4000"
+const BACKENDURL = "https://travelapp-production-a035.up.railway.app"
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,6 +13,8 @@ export default defineConfig({
       '/api': {
         target: BACKENDURL,
         changeOrigin: true,
+        secure: false,      // allow self-signed / external TLS
+        ws: true,           // proxy WebSocket (socket.io)
         headers: {
           'x-app-token': APP_TOKEN,
         },
@@ -20,6 +22,7 @@ export default defineConfig({
       '/health': {
         target: BACKENDURL,
         changeOrigin: true,
+        secure: false,
         headers: {
           'x-app-token': APP_TOKEN,
         },
@@ -27,6 +30,7 @@ export default defineConfig({
       '/media': {
         target: BACKENDURL,
         changeOrigin: true,
+        secure: false,
         headers: {
           'x-app-token': APP_TOKEN,
         },
@@ -34,3 +38,4 @@ export default defineConfig({
     },
   },
 })
+
