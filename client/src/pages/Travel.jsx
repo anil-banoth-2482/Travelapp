@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import PostCard from '../components/PostCard';
 import { apiFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const Travel = () => {
   const { feedPreferences, t } = useLanguage();
@@ -10,13 +11,7 @@ const Travel = () => {
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
 
-  const currentUser = useMemo(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem('currentUser'));
-    } catch {
-      return null;
-    }
-  }, []);
+  const { user } = useAuth();
 
   const states = useMemo(
     () => [
@@ -62,6 +57,25 @@ const Travel = () => {
   useEffect(() => {
     let mounted = true;
 
+    const stateNameToSlug = {
+      'andhra pradesh': 'andhra-pradesh',
+      'telangana': 'telangana',
+      'tamil nadu': 'tamil-nadu',
+      'kerala': 'kerala',
+      'karnataka': 'karnataka',
+      'maharashtra': 'maharashtra',
+      'rajasthan': 'rajasthan',
+      'uttar pradesh': 'uttar-pradesh',
+      'goa': 'goa',
+      'himachal pradesh': 'himachal-pradesh',
+      'uttarakhand': 'uttarakhand',
+      'west bengal': 'west-bengal',
+      'gujarat': 'gujarat',
+      'punjab': 'punjab',
+      'delhi': 'delhi',
+      'national capital territory of delhi': 'delhi',
+    };
+
     const autoLocate = async () => {
       if (!navigator.geolocation) return;
       setLocating(true);
@@ -74,17 +88,17 @@ const Travel = () => {
           });
         });
 
-        const res = await apiFetch('/api/geocode/reverse', {
-          method: 'POST',
-          body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-        });
-
-        if (!res.ok) throw new Error('Geocoding failed');
-
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+          { headers: { 'Accept-Language': 'en' } },
+        );
+        if (!res.ok) throw new Error('Nominatim failed');
         const json = await res.json();
-        if (mounted && json.stateSlug) {
-          const validState = states.some((s) => s.value === json.stateSlug);
-          if (validState) setSelectedState(json.stateSlug);
+        const stateName = (json.address?.state || '').toLowerCase();
+        const slug = stateNameToSlug[stateName];
+        if (mounted && slug) {
+          setSelectedState(slug);
         }
       } catch (err) {
         console.warn('Geolocation fallback:', err.message);
@@ -95,103 +109,61 @@ const Travel = () => {
 
     autoLocate();
     return () => { mounted = false; };
-  }, [states]);
+  }, []);
 
-  // aiScores: map of post.id → numeric score from OpenAI (0–10)
-  const [aiScores, setAiScores] = useState({});
-
-  // Tier badge derived from AI score (0-10)
+  // Tier badge derived from tourism score (0-100)
   const tierLabel = (score) => {
-    if (score === undefined) return 'loading';
-    if (score >= 8) return 'high';
-    if (score >= 5) return 'medium';
-    if (score >= 2) return 'low';
+    if (score === undefined || score === null) return 'none';
+    if (score >= 80) return 'high';
+    if (score >= 60) return 'medium';
+    if (score >= 40) return 'low';
     return 'none';
   };
 
   // Visible posts: state + language filtered — all logic inlined to avoid stale closures
   const visiblePosts = useMemo(() => {
     return posts.filter((post) => {
-      if (currentUser?.profileName && post?.author?.profileName === currentUser.profileName) {
+      if (user?.username && post?.username === user.username) {
         return false;
       }
 
       // ── language filter ──
-      const langs = post?.lang || [];
-      if (langs.length > 0) {
+      const lang = post?.language || '';
+      if (lang) {
         const selectedLangs = feedPreferences.languages;
-        if (feedPreferences.mode === 'single') {
-          if (!(langs.length === 1 && langs[0] === selectedLangs[0])) return false;
-        } else {
-          if (!langs.every((l) => selectedLangs.includes(l))) return false;
+        if (lang !== 'mixed') {
+          if (feedPreferences.mode === 'single') {
+            if (lang !== selectedLangs[0]) return false;
+          } else {
+            if (!selectedLangs.includes(lang)) return false;
+          }
         }
       }
 
       // ── travel/state filter ──
-      if (post?.location?.stateSlug) {
-        // Post has a location tag — always qualifies, filter by state
+      if (post?.state) {
         if (selectedState === 'all') return true;
-        return post.location.stateSlug === selectedState;
+        return post.state === selectedState;
       }
 
       // No location tag: only show under "All" if AI scored it travel-worthy (or not yet scored)
       if (selectedState !== 'all') return false;
-      const s = aiScores[post.id];
-      return s === undefined || s >= 4;
+      const s = post.tourismScore ?? 0;
+      return s >= 40;
     });
-  }, [posts, selectedState, feedPreferences, aiScores, currentUser?.profileName]);
-
-  // Ask the server / OpenAI to score each visible post
-  useEffect(() => {
-    if (visiblePosts.length === 0) return;
-    const unscored = visiblePosts.filter((p) => aiScores[p.id] === undefined);
-    if (unscored.length === 0) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await apiFetch('/api/ai/score-posts', {
-          method: 'POST',
-          body: JSON.stringify({ 
-            posts: unscored.map((p) => ({ 
-              id: p.id, 
-              description: p.description,
-              hasLocation: !!p?.location?.stateSlug
-            })) 
-          }),
-        });
-        if (!res.ok) throw new Error('AI scoring failed');
-        const json = await res.json();
-        const newScores = {};
-        (json.scores || []).forEach((score, i) => {
-          if (unscored[i]) newScores[unscored[i].id] = score;
-        });
-        if (!cancelled) setAiScores((prev) => ({ ...prev, ...newScores }));
-      } catch (err) {
-        console.warn('AI scoring unavailable, fallback applied:', err.message);
-        // Fallback: location-tagged posts score 5, generic posts score 2
-        const fallback = {};
-        unscored.forEach((p) => { fallback[p.id] = p?.location?.stateSlug ? 5 : 2; });
-        if (!cancelled) setAiScores((prev) => ({ ...prev, ...fallback }));
-      }
-    })();
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visiblePosts, currentUser]);
+  }, [posts, selectedState, feedPreferences, user?.username]);
 
   // Final sorted list: AI score desc → newest first within same score
   const filteredPosts = useMemo(() => {
     return [...visiblePosts]
       .sort((a, b) => {
-        const sa = aiScores[a.id] ?? 3;
-        const sb = aiScores[b.id] ?? 3;
+        const sa = a.tourismScore ?? 0;
+        const sb = b.tourismScore ?? 0;
         if (sb !== sa) return sb - sa;
         return Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0);
       })
-      .map((post) => ({ ...post, _tierLabel: tierLabel(aiScores[post.id]) }));
-  }, [visiblePosts, aiScores]);
+      .map((post) => ({ ...post, _tierLabel: tierLabel(post.tourismScore) }));
+  }, [visiblePosts]);
 
 
   const selectStyle = {
@@ -238,7 +210,7 @@ const Travel = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {filteredPosts.map((post) => (
-              <PostCard key={post.id} post={post}>
+              <PostCard key={post._id} post={post}>
                 {/* Travel badges + tags */}
                 <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   {post._tierLabel === 'high' && (
@@ -250,12 +222,12 @@ const Travel = () => {
                   {post._tierLabel === 'low' && (
                     <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'rgba(255,255,255,0.07)', color: 'var(--text-secondary)', padding: '2px 10px', borderRadius: '20px' }}>🌿 Local Interest</span>
                   )}
-                  {post.location?.state && (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '6px' }}>📍 {post.location.state}</span>
+                  {post.state && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '6px' }}>📍 {post.state}</span>
                   )}
-                  {(post.lang || []).map((l) => (
-                    <span key={l} style={{ fontSize: '0.75rem', color: 'var(--saffron)' }}>#{l}</span>
-                  ))}
+                  {post.language && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--saffron)' }}>#{post.language}</span>
+                  )}
                 </div>
               </PostCard>
             ))}

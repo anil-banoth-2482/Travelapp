@@ -3,15 +3,20 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authSharedStyles } from './Login';
 import cultureImgLocal from '../assets/Gemini_Generated_Image_ekus7aekus7aekus.png';
 import { useLanguage } from '../context/LanguageContext';
+import { apiFetch, setAuthToken } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
-const Register = ({ setIsAuthenticated }) => {
+const Register = () => {
   const navigate = useNavigate();
   const { updateFeedPreferences } = useLanguage();
+  const { setUser } = useAuth();
   const [btnHover, setBtnHover] = useState(false);
   const [loginHover, setLoginHover] = useState(false);
   const [inputsHover, setInputsHover] = useState({});
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isSqueezed, setIsSqueezed] = useState(window.innerWidth <= 520);
+  const [error, setError] = useState(null); // { type: 'exists' | 'error', msg: string }
+  const [loading, setLoading] = useState(false);
 
   // Dynamic window resize listener
   useEffect(() => {
@@ -23,41 +28,53 @@ const Register = ({ setIsAuthenticated }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-    // Collect form data and store locally (clientside for now)
     const form = e.target;
     const fd = new FormData(form);
-    const user = {
-      firstName: fd.get('firstName') || '',
-      lastName: fd.get('lastName') || '',
-      profileName: fd.get('profileName') || '',
-      email: fd.get('email') || '',
-      password: fd.get('password') || '',
-      nativeLanguage: fd.get('nativeLanguage') || '',
-      state: fd.get('state') || ''
+    const firstName = String(fd.get('firstName') || '').trim();
+    const lastName = String(fd.get('lastName') || '').trim();
+    const payload = {
+      username: String(fd.get('profileName') || '').toLowerCase().trim(),
+      name: `${firstName} ${lastName}`.trim(),
+      email: String(fd.get('email') || '').trim(),
+      password: String(fd.get('password') || ''),
+      preferredLanguage: String(fd.get('nativeLanguage') || '').trim(),
+      state: String(fd.get('state') || '').trim(),
     };
 
-    // Save into localStorage as an array of users and set current user
-    try {
-      const existing = localStorage.getItem('users');
-      const users = existing ? JSON.parse(existing) : [];
-      users.push(user);
-      localStorage.setItem('users', JSON.stringify(users));
-      const userJson = JSON.stringify(user);
-      sessionStorage.setItem('currentUser', userJson);
-      localStorage.setItem('currentUser', userJson);
-      window.dispatchEvent(new Event('authchange'));
-      
-      // Reset language setup for the new user
-      updateFeedPreferences({ isInitialSetupDone: false });
-    } catch (err) {
-      console.error('Failed to save user locally', err);
-    }
 
-    if (setIsAuthenticated) setIsAuthenticated(true);
-    navigate('/home');
+    try {
+      const res = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const errMsg = (err.error || '').toLowerCase();
+        if (res.status === 409 || errMsg.includes('already exists') || errMsg.includes('already taken')) {
+          setError({ type: 'exists', msg: err.error });
+        } else {
+          setError({ type: 'error', msg: err.error || 'Registration failed. Please try again.' });
+        }
+        return;
+      }
+      const data = await res.json();
+      // New backend sends accessToken, legacy sends token
+      const token = data.accessToken || data.token;
+      if (token) setAuthToken(token);
+      setUser(data.user || null);
+      updateFeedPreferences({ isInitialSetupDone: false });
+      navigate('/home');
+    } catch (err) {
+      console.error('Registration failed', err);
+      setError({ type: 'error', msg: 'Could not reach the server. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getInputStyle = (id) => ({
@@ -267,13 +284,45 @@ const Register = ({ setIsAuthenticated }) => {
               </select>
             </div>
 
+            {/* ── In-page error banner ── */}
+            {error && (
+              <div style={{
+                background: error.type === 'exists' ? 'rgba(249,115,22,0.1)' : 'rgba(239,68,68,0.1)',
+                border: `1px solid ${error.type === 'exists' ? 'rgba(249,115,22,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+              }}>
+                {error.type === 'exists' ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: 'var(--saffron, #f97316)', fontSize: '0.92rem' }}>
+                      <span>⚠️</span> An account with this email or username already exists
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      Already have an account?{' '}
+                      <Link to="/login" style={{ color: 'var(--saffron, #f97316)', fontWeight: 600, textDecoration: 'none' }}>
+                        Log in here →
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#ef4444', fontSize: '0.92rem' }}>
+                    <span>❌</span> {error.msg || 'Something went wrong. Try again.'}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button 
-              type="submit" 
-              style={getBtnStyle()}
+              type="submit"
+              disabled={loading}
+              style={{ ...getBtnStyle(), opacity: loading ? 0.7 : 1 }}
               onMouseEnter={() => setBtnHover(true)}
               onMouseLeave={() => setBtnHover(false)}
             >
-              Sign up
+              {loading ? 'Creating account…' : 'Sign up'}
             </button>
           </form>
 

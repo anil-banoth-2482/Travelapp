@@ -3,13 +3,11 @@ import FeedLanguageBar from '../components/FeedLanguageBar';
 import PostCard from '../components/PostCard';
 import { useLanguage } from '../context/LanguageContext';
 import { apiFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
   const { feedPreferences, t } = useLanguage();
-  const currentUser = (() => {
-    try { return JSON.parse(sessionStorage.getItem('currentUser')); }
-    catch { return null; }
-  })();
+  const { user } = useAuth();
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,16 +31,17 @@ const Home = () => {
   useEffect(() => { loadPosts(); }, []);
 
   const filteredPosts = posts.filter(post => {
-    if (currentUser?.profileName && post?.author?.profileName === currentUser.profileName) return false;
+    if (user?.username && post?.username === user.username) return false;
     const selectedLangs = feedPreferences.languages;
-    const langs = post.lang || [];
-    if (langs.length === 0) return true;
-    if (feedPreferences.mode === 'single') return langs.length === 1 && langs[0] === selectedLangs[0];
-    return langs.every(l => selectedLangs.includes(l));
+    const lang = post.language || '';
+    if (!lang) return true;
+    if (lang === 'mixed') return true;
+    if (feedPreferences.mode === 'single') return lang === selectedLangs[0];
+    return selectedLangs.includes(lang);
   });
 
   return (
-    <div style={{ padding: '0', maxWidth: '700px', margin: '0 auto' }}>
+    <div className="scrollable-col" style={{ padding: '0 0.25rem', maxWidth: '700px', margin: '0 auto', width: '100%' }}>
       <FeedLanguageBar />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '2rem' }}>
@@ -51,7 +50,7 @@ const Home = () => {
             {t('home_loading')}
           </div>
         ) : filteredPosts.length > 0 ? filteredPosts.map(post => (
-          <PostCard key={post.id} post={post}>
+          <PostCard key={post._id} post={post}>
             {/* Language tags */}
             {(post.lang || []).length > 0 && (
               <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

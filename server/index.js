@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const http = require('http');
 const { URL } = require('url');
@@ -12,6 +15,10 @@ const openai = new OpenAI({
 
 const PORT = Number(process.env.PORT || 4000);
 const APP_TOKEN = process.env.APP_TOKEN || 'local-dev-token';
+const JWT_SECRET = process.env.JWT_SECRET || APP_TOKEN;
+const MONGODB_URI = process.env.MONGODB_URI;
+const AUTH_COOKIE = 'auth_token';
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 let DATA_DIR = path.join(__dirname, 'data');
 let POSTS_FILE = path.join(DATA_DIR, 'posts.json');
@@ -77,8 +84,15 @@ const sendJson = (res, statusCode, obj) => {
 };
 
 const addCors = (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-App-Token');
 };
 
@@ -89,6 +103,75 @@ const requireAppToken = (req, res) => {
     return false;
   }
   return true;
+};
+
+const parseCookies = (cookieHeader = '') =>
+  cookieHeader
+    .split(';')
+    .map(v => v.trim())
+    .filter(Boolean)
+    .reduce((acc, pair) => {
+      const idx = pair.indexOf('=');
+      if (idx === -1) return acc;
+      const key = pair.slice(0, idx).trim();
+      const val = pair.slice(idx + 1).trim();
+      acc[key] = decodeURIComponent(val);
+      return acc;
+    }, {});
+
+const setAuthCookie = (res, token) => {
+  const parts = [
+    `${AUTH_COOKIE}=${encodeURIComponent(token)}`,
+    'HttpOnly',
+    'Path=/',
+    `Max-Age=${7 * 24 * 60 * 60}`,
+  ];
+  if (IS_PROD) {
+    parts.push('Secure');
+    parts.push('SameSite=None');
+  } else {
+    parts.push('SameSite=Lax');
+  }
+  res.setHeader('Set-Cookie', parts.join('; '));
+};
+
+const clearAuthCookie = (res) => {
+  const parts = [
+    `${AUTH_COOKIE}=`,
+    'HttpOnly',
+    'Path=/',
+    'Max-Age=0',
+  ];
+  if (IS_PROD) {
+    parts.push('Secure');
+    parts.push('SameSite=None');
+  } else {
+    parts.push('SameSite=Lax');
+  }
+  res.setHeader('Set-Cookie', parts.join('; '));
+};
+
+const requireAuth = (req, res) => {
+  const auth = req.headers.authorization || '';
+  let token = '';
+  if (auth.startsWith('Bearer ')) {
+    token = auth.slice('Bearer '.length).trim();
+  } else {
+    const cookies = parseCookies(req.headers.cookie || '');
+    token = cookies[AUTH_COOKIE] || '';
+  }
+
+  if (!token) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return null;
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return payload;
+  } catch {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return null;
+  }
 };
 
 const extFromMime = (mime) => {
@@ -111,6 +194,71 @@ const createdAtMs = (post) => {
 /** Canonical conv key: always alphabetically sorted */
 const convKey = (a, b) => [a, b].sort().join('::');
 
+mongoose.set('strictQuery', true);
+
+const userSchema = new mongoose.Schema({
+    profileName: { type: String, required: true, unique: true, trim: true },
+    email: { type: String, required: true, unique: true, trim: true },
+    passwordHash: { type: String, required: true },
+    firstName: { type: String, default: '' },
+    lastName: { type: String, default: '' },
+    profilePic: { type: String, default: '' },
+    bio: { type: String, default: '' },
+    nativeLanguage: { type: String, default: '' },
+    state: { type: String, default: '' },
+  }, { timestamps: true });
+
+const postSchema = new mongoose.Schema({
+    description: { type: String, required: true },
+    media: {
+      type: { type: String, enum: ['image', 'video', null], default: null },
+      url: { type: String, default: '' },
+    },
+    lang: { type: [String], default: [] },
+    location: {
+      state: { type: String, default: '' },
+      stateSlug: { type: String, default: '' },
+    },
+    author: {
+      id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      profileName: { type: String, required: true },
+      firstName: { type: String, default: '' },
+      lastName: { type: String, default: '' },
+      profilePic: { type: String, default: '' },
+    },
+  }, { timestamps: true });
+
+const messageSchema = new mongoose.Schema({
+    convKey: { type: String, required: true, index: true },
+    from: { type: String, required: true },
+    to: { type: String, required: true },
+    text: { type: String, required: true },
+    ts: { type: Number, required: true },
+    readAt: { type: Number, default: null },
+  }, { timestamps: true });
+
+const mediaSchema = new mongoose.Schema({
+    mime: { type: String, required: true },
+    dataBase64: { type: String, required: true },
+  }, { timestamps: true });
+
+const User = mongoose.model('User', userSchema);
+const Post = mongoose.model('Post', postSchema);
+const Message = mongoose.model('Message', messageSchema);
+const Media = mongoose.model('Media', mediaSchema);
+
+const toUserResponse = (user) => ({
+  id: user._id,
+  profileName: user.profileName,
+  email: user.email,
+  firstName: user.firstName || '',
+  lastName: user.lastName || '',
+  profilePic: user.profilePic || '',
+  bio: user.bio || '',
+  nativeLanguage: user.nativeLanguage || '',
+  state: user.state || '',
+});
+
 try {
   ensureDataFiles();
 } catch (err) {
@@ -118,6 +266,16 @@ try {
   setDataPaths(path.join(os.tmpdir(), 'social-data'));
   ensureDataFiles();
 }
+
+const connectDb = async () => {
+  if (!MONGODB_URI) {
+    throw new Error('Missing MONGODB_URI');
+  }
+  await mongoose.connect(MONGODB_URI, {
+    autoIndex: true,
+    serverSelectionTimeoutMS: 10000,
+  });
+};
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -133,26 +291,19 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
 
     if (req.method === 'GET' && pathname.startsWith('/media/')) {
-      const fileName = pathname.replace('/media/', '');
-      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '');
-      const filePath = path.join(MEDIA_DIR, safeName);
-      if (!safeName || !fs.existsSync(filePath)) {
+      const id = pathname.replace('/media/', '').trim();
+      if (!id) {
         sendJson(res, 404, { error: 'Not found' });
         return;
       }
-
-      const ext = path.extname(safeName).toLowerCase();
-      const contentType =
-        ext === '.png' ? 'image/png'
-          : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-            : ext === '.webp' ? 'image/webp'
-              : ext === '.gif' ? 'image/gif'
-                : ext === '.mp4' ? 'video/mp4'
-                  : ext === '.webm' ? 'video/webm'
-                    : 'application/octet-stream';
-
-      res.writeHead(200, { 'Content-Type': contentType });
-      fs.createReadStream(filePath).pipe(res);
+      const media = await Media.findById(id).lean();
+      if (!media) {
+        sendJson(res, 404, { error: 'Not found' });
+        return;
+      }
+      const buffer = Buffer.from(media.dataBase64, 'base64');
+      res.writeHead(200, { 'Content-Type': media.mime });
+      res.end(buffer);
       return;
     }
 
@@ -179,6 +330,150 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ═══════════════════════════════════════════════════════
+       AUTH API
+       POST /api/auth/register
+       POST /api/auth/login
+       GET  /api/users/me
+       PUT  /api/users/me
+       GET  /api/users/:profileName
+    ═══════════════════════════════════════════════════════ */
+
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const body = await readBodyJson(req);
+      const profileName = String(body.profileName || '').trim().toLowerCase();
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      if (!profileName || !email || !password) {
+        sendJson(res, 400, { error: 'profileName, email, and password are required' });
+        return;
+      }
+      const existing = await User.findOne({ $or: [{ profileName }, { email }] }).lean();
+      if (existing) {
+        sendJson(res, 409, { error: 'User already exists' });
+        return;
+      }
+      const passwordHash = await bcrypt.hash(password, 10);
+      const user = await User.create({
+        profileName,
+        email,
+        passwordHash,
+        firstName: String(body.firstName || '').trim(),
+        lastName: String(body.lastName || '').trim(),
+        profilePic: String(body.profilePic || ''),
+        bio: String(body.bio || ''),
+        nativeLanguage: String(body.nativeLanguage || ''),
+        state: String(body.state || ''),
+      });
+      const token = jwt.sign({ userId: user._id, profileName: user.profileName }, JWT_SECRET, { expiresIn: '7d' });
+      setAuthCookie(res, token);
+      sendJson(res, 201, { token, user: toUserResponse(user) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const body = await readBodyJson(req);
+      const identifier = String(body.identifier || body.email || body.profileName || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      if (!identifier || !password) {
+        sendJson(res, 400, { error: 'identifier and password are required' });
+        return;
+      }
+      const user = await User.findOne({ $or: [{ email: identifier }, { profileName: identifier }] });
+      if (!user) {
+        sendJson(res, 401, { error: 'Invalid credentials' });
+        return;
+      }
+      const ok = await bcrypt.compare(password, user.passwordHash);
+      if (!ok) {
+        sendJson(res, 401, { error: 'Invalid credentials' });
+        return;
+      }
+      const token = jwt.sign({ userId: user._id, profileName: user.profileName }, JWT_SECRET, { expiresIn: '7d' });
+      setAuthCookie(res, token);
+      sendJson(res, 200, { token, user: toUserResponse(user) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      clearAuthCookie(res);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/users/me') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
+      const user = await User.findById(auth.userId);
+      if (!user) { sendJson(res, 404, { error: 'User not found' }); return; }
+      sendJson(res, 200, { user: toUserResponse(user) });
+      return;
+    }
+
+    if (req.method === 'PUT' && pathname === '/api/users/me') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
+      const existingUser = await User.findById(auth.userId).lean();
+      if (!existingUser) { sendJson(res, 404, { error: 'User not found' }); return; }
+      const body = await readBodyJson(req);
+      const update = {
+        firstName: String(body.firstName || '').trim(),
+        lastName: String(body.lastName || '').trim(),
+        bio: String(body.bio || ''),
+        profilePic: String(body.profilePic || ''),
+      };
+      if (body.profileName) {
+        update.profileName = String(body.profileName || '').trim().toLowerCase();
+      }
+      if (update.profileName) {
+        const existing = await User.findOne({ profileName: update.profileName, _id: { $ne: auth.userId } }).lean();
+        if (existing) { sendJson(res, 409, { error: 'Profile name already taken' }); return; }
+      }
+      const user = await User.findByIdAndUpdate(auth.userId, update, { new: true });
+      if (!user) { sendJson(res, 404, { error: 'User not found' }); return; }
+
+      // Keep post author info in sync
+      await Post.updateMany(
+        { 'author.id': user._id },
+        {
+          $set: {
+            'author.profileName': user.profileName,
+            'author.firstName': user.firstName || '',
+            'author.lastName': user.lastName || '',
+            'author.profilePic': user.profilePic || '',
+          },
+        }
+      );
+
+      // If profileName changed, update message usernames and convKey
+      const oldName = existingUser.profileName;
+      const newName = user.profileName;
+      if (oldName && newName && oldName !== newName) {
+        const msgs = await Message.find({ $or: [{ from: oldName }, { to: oldName }] });
+        await Promise.all(
+          msgs.map((m) => {
+            const from = m.from === oldName ? newName : m.from;
+            const to = m.to === oldName ? newName : m.to;
+            m.from = from;
+            m.to = to;
+            m.convKey = convKey(from, to);
+            return m.save();
+          })
+        );
+      }
+      sendJson(res, 200, { user: toUserResponse(user) });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/users/')) {
+      const profileName = pathname.replace('/api/users/', '').trim().toLowerCase();
+      if (!profileName) { sendJson(res, 404, { error: 'User not found' }); return; }
+      const user = await User.findOne({ profileName }).lean();
+      if (!user) { sendJson(res, 404, { error: 'User not found' }); return; }
+      sendJson(res, 200, { user: toUserResponse(user) });
+      return;
+    }
+
+    /* ═══════════════════════════════════════════════════════
        MESSAGES API
        GET  /api/messages?user=alice&other=bob   → conversation thread
        GET  /api/messages/unread?user=alice       → unread summary for alice
@@ -186,32 +481,39 @@ const server = http.createServer(async (req, res) => {
     ═══════════════════════════════════════════════════════ */
 
     if (req.method === 'GET' && pathname === '/api/messages') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const userA = url.searchParams.get('user') || '';
       const userB = url.searchParams.get('other') || '';
       if (!userA || !userB) {
         sendJson(res, 400, { error: 'user and other query params required' });
         return;
       }
-      const allMsgs = readJson(MESSAGES_FILE);
+      if (auth.profileName !== userA) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
       const key = convKey(userA, userB);
-      const thread = allMsgs
-        .filter(m => m.convKey === key)
-        .sort((a, b) => a.ts - b.ts);
+      const thread = await Message.find({ convKey: key }).sort({ ts: 1 }).lean();
       sendJson(res, 200, { messages: thread });
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/messages/conversations') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const user = url.searchParams.get('user') || '';
       if (!user) {
         sendJson(res, 400, { error: 'user query param required' });
         return;
       }
-      const allMsgs = readJson(MESSAGES_FILE);
-      // Group by convKey for this user, pick last message per conversation
+      if (auth.profileName !== user) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
+      const allMsgs = await Message.find({ $or: [{ from: user }, { to: user }] }).lean();
       const convMap = {};
       allMsgs.forEach(msg => {
-        if (msg.from !== user && msg.to !== user) return;
         const key = msg.convKey;
         if (!convMap[key] || msg.ts > convMap[key].lastMsg.ts) {
           const other = msg.from === user ? msg.to : msg.from;
@@ -224,15 +526,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && pathname === '/api/messages/unread') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const user = url.searchParams.get('user') || '';
       if (!user) {
         sendJson(res, 400, { error: 'user query param required' });
         return;
       }
-      const allMsgs = readJson(MESSAGES_FILE);
-      // Find unread messages addressed to this user
-      const unreadMsgs = allMsgs.filter(m => m.to === user && !m.readAt);
-      // Group by sender
+      if (auth.profileName !== user) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
+      const unreadMsgs = await Message.find({ to: user, readAt: null }).lean();
       const byFrom = {};
       unreadMsgs.forEach(m => {
         if (!byFrom[m.from]) byFrom[m.from] = { count: 0, latest: null };
@@ -251,6 +556,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/messages') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const body = await readBodyJson(req);
       const from = String(body.from || '').trim();
       const to   = String(body.to   || '').trim();
@@ -259,24 +566,25 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'from, to, and text are required' });
         return;
       }
-      const allMsgs = readJson(MESSAGES_FILE);
-      const newMsg = {
-        id:      `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      if (from !== auth.profileName) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
+      const newMsg = await Message.create({
         convKey: convKey(from, to),
         from,
         to,
         text,
-        ts:     Date.now(),
+        ts: Date.now(),
         readAt: null,
-      };
-      allMsgs.push(newMsg);
-      writeJson(MESSAGES_FILE, allMsgs);
+      });
       sendJson(res, 201, { message: newMsg });
       return;
     }
 
     if (req.method === 'POST' && pathname === '/api/messages/read') {
-      // Mark all messages from `from` to `to` as read
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const body = await readBodyJson(req);
       const byUser = String(body.byUser || '').trim();
       const fromUser = String(body.fromUser || '').trim();
@@ -284,16 +592,15 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'byUser and fromUser are required' });
         return;
       }
-      const allMsgs = readJson(MESSAGES_FILE);
-      let changed = 0;
-      allMsgs.forEach(m => {
-        if (m.from === fromUser && m.to === byUser && !m.readAt) {
-          m.readAt = Date.now();
-          changed++;
-        }
-      });
-      writeJson(MESSAGES_FILE, allMsgs);
-      sendJson(res, 200, { marked: changed });
+      if (byUser !== auth.profileName) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
+      const result = await Message.updateMany(
+        { from: fromUser, to: byUser, readAt: null },
+        { $set: { readAt: Date.now() } }
+      );
+      sendJson(res, 200, { marked: result.modifiedCount || 0 });
       return;
     }
 
@@ -370,6 +677,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/media') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const body = await readBodyJson(req);
       const mime = String(body.mime || '');
       const dataUrl = String(body.dataUrl || '');
@@ -377,49 +686,47 @@ const server = http.createServer(async (req, res) => {
       if (!ext) { sendJson(res, 400, { error: 'Unsupported media type' }); return; }
       if (!dataUrl.startsWith('data:') || !dataUrl.includes(',')) { sendJson(res, 400, { error: 'Invalid dataUrl' }); return; }
       const base64 = dataUrl.split(',')[1];
-      const buffer = Buffer.from(base64, 'base64');
-      if (buffer.length === 0) { sendJson(res, 400, { error: 'Empty media' }); return; }
-      const fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-      const filePath = path.join(MEDIA_DIR, fileName);
-      fs.writeFileSync(filePath, buffer);
-      sendJson(res, 201, { url: `/media/${fileName}` });
+      if (!base64) { sendJson(res, 400, { error: 'Empty media' }); return; }
+      const media = await Media.create({ mime, dataBase64: base64 });
+      sendJson(res, 201, { url: `/media/${media._id}` });
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/posts') {
-      const posts = readJson(POSTS_FILE);
-      posts.sort((a, b) => createdAtMs(b) - createdAtMs(a));
+      const posts = await Post.find().sort({ createdAt: -1 }).lean();
       sendJson(res, 200, { posts });
       return;
     }
 
     if (req.method === 'POST' && pathname === '/api/posts') {
+      const auth = requireAuth(req, res);
+      if (!auth) return;
       const body = await readBodyJson(req);
       const description = String(body.description || '').trim();
       const mediaType = body.mediaType === 'image' || body.mediaType === 'video' ? body.mediaType : null;
-      const mediaUrl = typeof body.mediaUrl === 'string' ? body.mediaUrl : null;
+      const mediaUrl = typeof body.mediaUrl === 'string' ? body.mediaUrl : '';
       const lang = Array.isArray(body.lang) ? body.lang : [];
-      const author = body && typeof body.author === 'object' && body.author !== null ? body.author : null;
-      const authorProfileName = author && typeof author.profileName === 'string' ? author.profileName.trim() : '';
-      const authorFirstName = author && typeof author.firstName === 'string' ? author.firstName.trim() : '';
-      const authorLastName = author && typeof author.lastName === 'string' ? author.lastName.trim() : '';
-      const authorProfilePic = author && typeof author.profilePic === 'string' ? author.profilePic : '';
+      const location = body && typeof body.location === 'object' && body.location !== null ? body.location : null;
 
       if (!description) { sendJson(res, 400, { error: 'Description is required' }); return; }
       if (mediaType && !mediaUrl) { sendJson(res, 400, { error: 'mediaUrl is required when mediaType is provided' }); return; }
-      if (!authorProfileName) { sendJson(res, 400, { error: 'Author is required' }); return; }
 
-      const posts = readJson(POSTS_FILE);
-      const newPost = {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        createdAt: new Date().toISOString(),
+      const user = await User.findById(auth.userId);
+      if (!user) { sendJson(res, 401, { error: 'Unauthorized' }); return; }
+
+      const newPost = await Post.create({
         description,
         media: mediaType ? { type: mediaType, url: mediaUrl } : null,
         lang,
-        author: { profileName: authorProfileName, firstName: authorFirstName, lastName: authorLastName, profilePic: authorProfilePic },
-      };
-      posts.unshift(newPost);
-      writeJson(POSTS_FILE, posts);
+        location: location ? { state: location.state || '', stateSlug: location.stateSlug || '' } : { state: '', stateSlug: '' },
+        author: {
+          id: user._id,
+          profileName: user.profileName,
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+          profilePic: user.profilePic || '',
+        },
+      });
       sendJson(res, 201, { post: newPost });
       return;
     }
@@ -431,9 +738,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Health: http://localhost:${PORT}/health`);
-  console.log(`Messages API: GET/POST http://localhost:${PORT}/api/messages`);
-  console.log(`Posts API: GET/POST http://localhost:${PORT}/api/posts`);
-});
+connectDb()
+  .then(() => {
+    console.log('MongoDB connected');
+    server.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Health: http://localhost:${PORT}/health`);
+      console.log(`Messages API: GET/POST http://localhost:${PORT}/api/messages`);
+      console.log(`Posts API: GET/POST http://localhost:${PORT}/api/posts`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
+  });

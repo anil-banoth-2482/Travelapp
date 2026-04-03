@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 const APP_TOKEN = 'local-dev-token'
 
-const BACKENDURL = "https://travelapp-production-a035.up.railway.app"
+const BACKENDURL = "http://localhost:4000"
 
 // https://vite.dev/config/
 export default defineConfig({

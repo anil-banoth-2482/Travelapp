@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import cultureImgLocal from '../assets/Gemini_Generated_Image_ekus7aekus7aekus.png';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
+import { apiFetch, setAuthToken } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 export const authSharedStyles = {
   pageWrapper: {
@@ -114,14 +116,17 @@ export const authSharedStyles = {
   }
 };
 
-const Login = ({ setIsAuthenticated }) => {
+const Login = () => {
   const navigate = useNavigate();
   const { updateFeedPreferences } = useLanguage();
+  const { setUser } = useAuth();
   const [btnHover, setBtnHover] = useState(false);
   const [createHover, setCreateHover] = useState(false);
   const [inputsHover, setInputsHover] = useState({});
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isSqueezed, setIsSqueezed] = useState(window.innerWidth <= 520);
+  const [error, setError] = useState(null); // { type: 'no_account' | 'wrong_password' | 'error', msg: string }
+  const [loading, setLoading] = useState(false);
 
   // Dynamic window resize listener
   useEffect(() => {
@@ -133,35 +138,44 @@ const Login = ({ setIsAuthenticated }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-    // Read form values
     const form = e.target;
     const fd = new FormData(form);
-    const identifier = fd.get('identifier') || fd.get('email') || '';
+    const identifier = (fd.get('identifier') || fd.get('email') || '').trim();
     const password = fd.get('password') || '';
 
     try {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const match = users.find(u => (u.email === identifier || u.profileName === identifier) && u.password === password);
-      if (match) {
-        const userJson = JSON.stringify(match);
-        sessionStorage.setItem('currentUser', userJson);
-        localStorage.setItem('currentUser', userJson);
-        window.dispatchEvent(new Event('authchange'));
-        
-        // Reset language setup if it's a new session or different user
-        updateFeedPreferences({ isInitialSetupDone: false });
-        
-        if(setIsAuthenticated) setIsAuthenticated(true);
-        navigate('/home');
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: identifier, password }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = (err.error || '').toLowerCase();
+        // 401 with 'invalid credentials' covers both no-account and wrong-password
+        // We treat it as "no account" when the user hasn't registered yet
+        // The backend returns the same message for security, so we guide them gently
+        setError({ type: 'no_account', msg: null });
         return;
       }
-      alert('Invalid credentials. Please check your email/username and password.');
+
+      const data = await res.json();
+      // The new backend sends `accessToken`, legacy sends `token`
+      const token = data.accessToken || data.token;
+      if (token) setAuthToken(token);
+      setUser(data.user || null);
+      updateFeedPreferences({ isInitialSetupDone: false });
+      navigate('/home');
     } catch (err) {
       console.error('Login error', err);
-      alert('Login failed due to an error. See console.');
+      setError({ type: 'error', msg: 'Could not reach the server. Please try again.' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -260,10 +274,10 @@ const Login = ({ setIsAuthenticated }) => {
               <input 
                 type="text" 
                 name="identifier"
-                placeholder="Profile name or email" 
+                placeholder="Email or username" 
                 required 
                 style={getInputStyle('identifier')}
-                onFocus={() => setInputsHover({...inputsHover, identifier: true})}
+                onFocus={() => { setInputsHover({...inputsHover, identifier: true}); setError(null); }}
                 onBlur={() => setInputsHover({...inputsHover, identifier: false})}
               />
             </div>
@@ -275,18 +289,52 @@ const Login = ({ setIsAuthenticated }) => {
                 placeholder="Password" 
                 required 
                 style={getInputStyle('pass')}
-                onFocus={() => setInputsHover({...inputsHover, pass: true})}
+                onFocus={() => { setInputsHover({...inputsHover, pass: true}); setError(null); }}
                 onBlur={() => setInputsHover({...inputsHover, pass: false})}
               />
             </div>
 
+            {/* ── In-page error banner ── */}
+            {error && (
+              <div style={{
+                background: error.type === 'no_account'
+                  ? 'rgba(249,115,22,0.1)'
+                  : 'rgba(239,68,68,0.1)',
+                border: `1px solid ${error.type === 'no_account' ? 'rgba(249,115,22,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+              }}>
+                {error.type === 'no_account' ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: 'var(--saffron, #f97316)', fontSize: '0.92rem' }}>
+                      <span>⚠️</span> No account found with these credentials
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      Haven't joined yet?{' '}
+                      <Link to="/register" style={{ color: 'var(--saffron, #f97316)', fontWeight: 600, textDecoration: 'none' }}>
+                        Create a free account →
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#ef4444', fontSize: '0.92rem' }}>
+                    <span>❌</span> {error.msg || 'Something went wrong. Try again.'}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button 
-              type="submit" 
-              style={getBtnStyle()}
+              type="submit"
+              disabled={loading}
+              style={{ ...getBtnStyle(), opacity: loading ? 0.7 : 1 }}
               onMouseEnter={() => setBtnHover(true)}
               onMouseLeave={() => setBtnHover(false)}
             >
-              Log in
+              {loading ? 'Signing in…' : 'Log in'}
             </button>
           </form>
 

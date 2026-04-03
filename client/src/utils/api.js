@@ -1,5 +1,16 @@
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
 const APP_TOKEN = import.meta.env.VITE_APP_TOKEN || 'local-dev-token';
+let authToken = '';
+
+export const setAuthToken = (token = '') => {
+  authToken = token || '';
+};
+
+export const clearAuthToken = () => {
+  authToken = '';
+};
+
+export const getAuthToken = () => authToken;
 
 export const resolveApiUrl = (pathOrUrl) => {
   if (!pathOrUrl) return '';
@@ -18,9 +29,14 @@ export const apiFetch = (pathOrUrl, opts = {}) => {
   if (APP_TOKEN) {
     headers.set('x-app-token', APP_TOKEN);
   }
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
 
   return fetch(resolveApiUrl(pathOrUrl), {
     ...opts,
     headers,
+    credentials: 'include',
   });
 };

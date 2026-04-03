@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { apiFetch, resolveApiUrl } from '../utils/api';
+import { apiFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const detectLanguagesFromText = (text) => {
   const t = (text || '').trim();
@@ -40,13 +41,7 @@ const CreatePost = () => {
   const [stateLabel, setStateLabel] = useState('');
   const [locating, setLocating] = useState(false);
 
-  const currentUser = useMemo(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem('currentUser'));
-    } catch {
-      return null;
-    }
-  }, []);
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
     return () => {
@@ -184,7 +179,7 @@ const CreatePost = () => {
 
     try {
       const detectedLangs = detectLanguagesFromText(desc);
-      const postType = detectedLangs.length <= 1 ? 'single' : 'mixed';
+      const language = detectedLangs.length > 1 ? 'mixed' : (detectedLangs[0] || '');
 
       let locationPayload = null;
       if (stateSlug === 'auto') {
@@ -197,31 +192,13 @@ const CreatePost = () => {
         locationPayload = { state: stateLabel || matched?.label || stateSlug, stateSlug };
       }
 
-      const dataUrl = await fileToDataUrl(mediaFile);
-      const uploadRes = await apiFetch('/api/media', {
-        method: 'POST',
-        body: JSON.stringify({ mime: mediaFile.type, dataUrl }),
-      });
-      if (!uploadRes.ok) {
-        const err = await uploadRes.json().catch(() => ({}));
-        throw new Error(err.error || t('error_media_upload_failed'));
-      }
-      const uploadJson = await uploadRes.json();
-      const mediaUrl = resolveApiUrl(uploadJson.url);
+      const imageUrl = await fileToDataUrl(mediaFile);
 
       const newPost = {
         description: desc,
-        lang: detectedLangs,
-        type: postType,
-        mediaType,
-        mediaUrl,
-        author: {
-          profileName: currentUser.profileName,
-          firstName: currentUser.firstName,
-          lastName: currentUser.lastName,
-          profilePic: currentUser.profilePic || '',
-        },
-        location: locationPayload,
+        imageUrl,
+        state: locationPayload?.stateSlug || locationPayload?.state || '',
+        language,
       };
 
       const postRes = await apiFetch('/api/posts', {

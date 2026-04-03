@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMessages } from '../context/MessagesContext';
+import { apiFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 const fmt = (ts) => {
@@ -16,18 +18,10 @@ const fmt = (ts) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-const getUserInfo = (profileName) => {
-  const users = JSON.parse(localStorage.getItem('users') || '[]');
-  const u = users.find(u => u.profileName === profileName);
-  if (u) return {
-    name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.profileName,
-    avatar: u.profilePic || `https://i.pravatar.cc/150?img=${Math.abs(profileName.charCodeAt(0)) % 70 + 1}`,
-  };
-  return {
-    name: profileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    avatar: `https://i.pravatar.cc/150?img=${Math.abs(profileName.charCodeAt(0)) % 70 + 1}`,
-  };
-};
+const fallbackUserInfo = (profileName) => ({
+  name: profileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+  avatar: `https://i.pravatar.cc/150?img=${Math.abs(profileName.charCodeAt(0)) % 70 + 1}`,
+});
 
 /* ─── responsive breakpoint ──────────────────────────────────────────── */
 const MOBILE_BP = 640; // px — below this, only one panel shows at a time
@@ -46,8 +40,8 @@ const useWindowWidth = () => {
 const Messages = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-  const myName = currentUser?.profileName || '';
+  const { user } = useAuth();
+  const myName = user?.username || '';
   const windowWidth = useWindowWidth();
   const isMobile = windowWidth < MOBILE_BP;
 
@@ -71,8 +65,8 @@ const Messages = () => {
     if (activeChat && myName) {
       fetchThread(myName, activeChat);
       markRead(myName, activeChat);
-      // Auto-focus input on mobile after opening chat
-      if (isMobile) setTimeout(() => inputRef.current?.focus(), 100);
+      // Auto-focus input on mobile — longer delay ensures keyboard opens
+      if (isMobile) setTimeout(() => inputRef.current?.focus(), 400);
     }
   }, [activeChat, myName]);
 
@@ -89,14 +83,64 @@ const Messages = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages.length]);
 
+  const [profileMap, setProfileMap] = useState({});
+
+  const fetchProfile = async (profileName) => {
+    if (!profileName || profileMap[profileName]) return;
+    try {
+      const res = await apiFetch(`/api/users/${profileName}`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setProfileMap(prev => ({
+        ...prev,
+        [profileName]: json.user || null,
+      }));
+    } catch {
+      setProfileMap(prev => ({
+        ...prev,
+        [profileName]: null,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    conversations.forEach((c) => fetchProfile(c.otherUser));
+  }, [conversations]);
+
+  useEffect(() => {
+    if (activeChat) fetchProfile(activeChat);
+  }, [activeChat]);
+
+  const getUserInfo = (profileName) => {
+    const user = profileMap[profileName];
+    if (user) {
+      return {
+        name: user.name || user.username || profileName,
+        avatar: user.avatarUrl || fallbackUserInfo(profileName).avatar,
+      };
+    }
+    return fallbackUserInfo(profileName);
+  };
+
   const activeChatInfo = activeChat ? getUserInfo(activeChat) : null;
 
   const handleSend = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || !activeChat) return;
-    const msg = await sendMessage(myName, activeChat, input);
+    e?.preventDefault();
+    const text = input.trim();
+    if (!text || !activeChat || !myName) {
+      console.warn('handleSend blocked:', { text: !!text, activeChat, myName });
+      return;
+    }
+    // Clear input immediately for responsive feel
     setInput('');
-    if (msg) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    const msg = await sendMessage(myName, activeChat, text);
+    if (msg) {
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    } else {
+      // Restore input if send failed so the user doesn't lose their message
+      setInput(text);
+      console.error('Message failed to send — restoring input');
+    }
   };
 
   const handleSelectConv = (otherUser) => {
@@ -124,6 +168,9 @@ const Messages = () => {
         height: '100%',
         gap: isMobile ? 0 : '1.5rem',
         overflow: 'hidden',
+        // On mobile ensure the container is a proper flex parent
+        minHeight: 0,
+        flex: 1,
       }}
       className="animate-up"
     >
@@ -179,10 +226,10 @@ const Messages = () => {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{info.name}</span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{fmt(conv.lastMsg?.ts)}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{fmt(conv.lastMsg?.createdAt)}</span>
                     </div>
                     <p style={{ margin: '0.1rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {conv.lastMsg?.from === myName ? 'You: ' : ''}{conv.lastMsg?.text || ''}
+                      {conv.lastMsg?.fromUsername === myName ? 'You: ' : ''}{conv.lastMsg?.text || ''}
                     </p>
                   </div>
                   {/* chevron on mobile */}
@@ -202,12 +249,17 @@ const Messages = () => {
       {showChat && (
         <div style={{
           ...glass,
-          flex: isMobile ? undefined : 1,
+          flex: 1,
+          // On mobile: fill the parent height so input isn't cut off
+          height: isMobile ? '100%' : undefined,
           width: isMobile ? '100%' : undefined,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           minWidth: 0,
+          minHeight: 0,
+          // Remove border-radius on mobile for full-screen feel
+          borderRadius: isMobile ? '0' : '16px',
         }}>
           {/* Chat header */}
           <div style={{ padding: '0.9rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -250,9 +302,9 @@ const Messages = () => {
                 <p style={{ fontSize: '0.9rem' }}>Start the conversation with {activeChatInfo?.name}!</p>
               </div>
             ) : chatMessages.map(msg => {
-              const isMine = msg.from === myName;
+              const isMine = msg.fromUsername === myName;
               return (
-                <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '8px' }}>
+                <div key={msg._id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '8px' }}>
                   {!isMine && <img src={activeChatInfo?.avatar} alt="" style={{ width: '26px', height: '26px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />}
                   <div style={{
                     maxWidth: isMobile ? '80%' : '65%',
@@ -264,7 +316,7 @@ const Messages = () => {
                     boxShadow: isMine ? '0 4px 12px rgba(249,115,22,0.25)' : 'none',
                   }}>
                     <div>{msg.text}</div>
-                    <div style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '0.2rem', textAlign: 'right' }}>{fmt(msg.ts)}</div>
+                    <div style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '0.2rem', textAlign: 'right' }}>{fmt(msg.createdAt)}</div>
                   </div>
                 </div>
               );
@@ -282,6 +334,12 @@ const Messages = () => {
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
+                }
+              }}
               placeholder={`Message ${activeChatInfo?.name || ''}…`}
               style={{
                 flex: 1,
@@ -295,20 +353,21 @@ const Messages = () => {
               }}
             />
             <button
-              type="submit"
-              disabled={!input.trim()}
+              type="button"
+              onClick={handleSend}
               style={{
-                background: input.trim() ? 'linear-gradient(135deg, var(--saffron, #f97316), var(--gold, #fbbf24))' : 'rgba(255,255,255,0.05)',
+                background: input.trim() ? 'linear-gradient(135deg, var(--saffron, #f97316), var(--gold, #fbbf24))' : 'rgba(255,255,255,0.07)',
                 border: 'none', borderRadius: '50%',
                 width: '42px', height: '42px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: input.trim() ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 transition: 'all 0.2s',
                 boxShadow: input.trim() ? '0 4px 12px rgba(249,115,22,0.35)' : 'none',
                 flexShrink: 0,
+                opacity: input.trim() ? 1 : 0.4,
               }}
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke={input.trim() ? 'white' : 'rgba(255,255,255,0.3)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke={input.trim() ? 'white' : 'rgba(255,255,255,0.5)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
               </svg>
             </button>

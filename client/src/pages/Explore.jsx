@@ -113,24 +113,24 @@ const Explore = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {filteredPosts.map((post) => {
-              const mediaUrl = resolveApiUrl(post.media?.url || '');
-              const mediaType = post.media?.type || '';
+              const mediaUrl = resolveApiUrl(post.imageUrl || post.media?.url || '');
+              const mediaType = post.media?.type || (mediaUrl ? 'image' : '');
 
               return (
                 <div key={post.id} className="glass" style={{ padding: '1.25rem', textAlign: 'left' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.9rem', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <img
-                        src={post.author?.profilePic || 'https://i.pravatar.cc/150?img=1'}
+                        src={post.avatarUrl || post.author?.profilePic || 'https://i.pravatar.cc/150?img=1'}
                         alt="Author"
                         style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--gold)' }}
                       />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {post.author?.firstName ? `${post.author.firstName} ${post.author.lastName || ''}`.trim() : 'User'}
+                          {post.name || 'User'}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                          {post.author?.profileName ? `@${post.author.profileName}` : ''}
+                          {post.username ? `@${post.username}` : ''}
                         </div>
                       </div>
                     </div>
@@ -165,11 +165,9 @@ const Explore = () => {
                     {post.description}
                   </div>
 
-                  {(post.lang || []).length > 0 && (
+                  {post.language && (
                     <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {(post.lang || []).map((l) => (
-                        <span key={l} style={{ fontSize: '0.75rem', color: 'var(--saffron)' }}>#{l}</span>
-                      ))}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--saffron)' }}>#{post.language}</span>
                     </div>
                   )}
                 </div>

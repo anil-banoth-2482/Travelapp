@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { apiFetch } from '../utils/api';
+import { io } from 'socket.io-client';
+import { apiFetch, getAuthToken } from '../utils/api';
+import { useAuth } from './AuthContext';
 
 const MessagesContext = createContext(null);
 
@@ -23,35 +25,35 @@ export const MessagesProvider = ({ children }) => {
 
   const currentUserRef = useRef(null);
   const pollRef = useRef(null);
-
-  const getMe = () => {
-    try { return JSON.parse(sessionStorage.getItem('currentUser')); }
-    catch { return null; }
-  };
+  const socketRef = useRef(null);
+  const { user } = useAuth();
 
   /* ── Fetch conversation list ── */
-  const fetchConversations = useCallback(async (user) => {
-    if (!user) return;
+  // Server uses JWT (req.user.userId) — no ?user= param needed
+  const fetchConversations = useCallback(async () => {
+    if (!user?.username) return;
     try {
-      const data = await apiFetchJson(`/api/messages/conversations?user=${encodeURIComponent(user)}`);
+      const data = await apiFetchJson('/api/messages/conversations');
       setConversations(data.conversations || []);
     } catch { /* offline – keep stale */ }
-  }, []);
+  }, [user?.username]);
 
   /* ── Fetch unread summary ── */
-  const fetchUnread = useCallback(async (user) => {
-    if (!user) return;
+  // Server uses JWT — no ?user= param needed
+  const fetchUnread = useCallback(async () => {
+    if (!user?.username) return;
     try {
-      const data = await apiFetchJson(`/api/messages/unread?user=${encodeURIComponent(user)}`);
+      const data = await apiFetchJson('/api/messages/unread');
       setUnreadSummary(data.unread || []);
       setTotalUnread(data.total || 0);
     } catch { /* offline */ }
-  }, []);
+  }, [user?.username]);
 
   /* ── Fetch a single thread ── */
+  // Server only needs ?other= (uses JWT for current user)
   const fetchThread = useCallback(async (userA, userB) => {
     try {
-      const data = await apiFetchJson(`/api/messages?user=${encodeURIComponent(userA)}&other=${encodeURIComponent(userB)}`);
+      const data = await apiFetchJson(`/api/messages?other=${encodeURIComponent(userB)}`);
       const key = convKey(userA, userB);
       setThreads(prev => ({ ...prev, [key]: data.messages || [] }));
       return data.messages || [];
@@ -61,48 +63,72 @@ export const MessagesProvider = ({ children }) => {
   }, []);
 
   /* ── Poll every 4 seconds for new messages ── */
-  const startPolling = useCallback((user) => {
+  const startPolling = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
-      fetchConversations(user);
-      fetchUnread(user);
+      fetchConversations();
+      fetchUnread();
     }, 4000);
   }, [fetchConversations, fetchUnread]);
 
   /* ── Boot / auth changes ── */
   useEffect(() => {
-    const boot = () => {
-      const me = getMe();
-      if (!me?.profileName) return;
-      const name = me.profileName;
-      currentUserRef.current = name;
-      fetchConversations(name);
-      fetchUnread(name);
-      startPolling(name);
-    };
-
-    boot();
-    window.addEventListener('authchange', boot);
+    if (!user?.username) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      return;
+    }
+    fetchConversations();
+    fetchUnread();
+    startPolling();
     return () => {
-      window.removeEventListener('authchange', boot);
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [fetchConversations, fetchUnread, startPolling]);
+  }, [user?.username, fetchConversations, fetchUnread, startPolling]);
+
+  useEffect(() => {
+    if (!user?.username) return;
+    const token = getAuthToken();
+    if (!token) return;
+
+    const socketUrl = import.meta.env.VITE_API_BASE || window.location.origin;
+    const socket = io(socketUrl, {
+      auth: { token },
+      withCredentials: true,
+    });
+    socketRef.current = socket;
+
+    socket.on('new_message', (msg) => {
+      if (!msg?.conversationKey) return;
+      setThreads(prev => {
+        const key = msg.conversationKey;
+        const list = prev[key] || [];
+        return { ...prev, [key]: [...list, msg] };
+      });
+      fetchConversations();
+      fetchUnread();
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [user?.username, fetchConversations, fetchUnread]);
 
   /* ── Send a message ── */
+  // Server POST /api/messages expects: { toUsername, text }
   const sendMessage = useCallback(async (fromUser, toUser, text) => {
     if (!text.trim()) return null;
     try {
       const data = await apiFetchJson('/api/messages', {
         method: 'POST',
-        body: JSON.stringify({ from: fromUser, to: toUser, text: text.trim() }),
+        body: JSON.stringify({ toUsername: toUser, text: text.trim() }),
       });
       const msg = data.message;
       const key = convKey(fromUser, toUser);
-      // Update local thread cache immediately
+      // Optimistically add to local thread cache
       setThreads(prev => ({ ...prev, [key]: [...(prev[key] || []), msg] }));
-      // Refresh conversation list
-      fetchConversations(fromUser);
+      // Refresh sidebar conversation list
+      fetchConversations();
       return msg;
     } catch (err) {
       console.error('sendMessage failed:', err);
@@ -111,13 +137,13 @@ export const MessagesProvider = ({ children }) => {
   }, [fetchConversations]);
 
   /* ── Mark conversation read ── */
+  // Server POST /api/messages/read expects: { fromUsername }
   const markRead = useCallback(async (byUser, fromUser) => {
     try {
       await apiFetchJson('/api/messages/read', {
         method: 'POST',
-        body: JSON.stringify({ byUser, fromUser }),
+        body: JSON.stringify({ fromUsername: fromUser }),
       });
-      // Immediately remove from local unread
       setUnreadSummary(prev => prev.filter(x => x.fromUser !== fromUser));
       setTotalUnread(prev => {
         const removed = unreadSummary.find(x => x.fromUser === fromUser);

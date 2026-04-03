@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 
+const NAV_HEIGHT = 72; // px
+const BOTTOM_NAV_HEIGHT = 64; // px (mobile bottom nav)
+
 const MainLayout = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const location = useLocation();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -13,23 +17,38 @@ const MainLayout = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Messages page needs a rigid, non-scrolling outlet so its own flex layout works
+  const isMessagesPage = location.pathname === '/messages';
+
   const containerStyle = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
     overflow: 'hidden',
   };
-  const NAV_HEIGHT = 72; // px — adjust if your Navbar has a different height
+
+  // BottomNav is position:fixed — doesn't consume layout space.
+  // But we still need to account for it in content height / padding:
+  //   - Messages page: rigid height so its flex layout manages scroll internally
+  //   - Other pages: normal scroll + paddingBottom so content isn't under the fixed nav
+  const chatOpen = isMessagesPage && new URLSearchParams(location.search).get('chat');
+  const mobileHeight = chatOpen
+    ? `calc(100vh - ${NAV_HEIGHT}px)` // full height when BottomNav is hidden
+    : `calc(100vh - ${NAV_HEIGHT}px)`; // same — BottomNav is fixed, padding handles the rest
 
   const layoutStyle = isMobile ? {
-    display: 'grid',
-    gridTemplateColumns: '1fr',
-    gap: '1rem',
+    display: 'flex',
+    flexDirection: 'column',
     width: '100%',
     margin: '0 auto',
-    padding: '1rem',
-    height: `calc(100vh - ${NAV_HEIGHT}px)`,
-    overflowY: 'auto',
+    padding: isMessagesPage ? 0 : '0.75rem',
+    height: mobileHeight,
+    overflow: isMessagesPage ? 'hidden' : 'auto',
+    overflowX: 'hidden',
+    // Extra bottom space on non-messages pages so content clears the fixed BottomNav
+    paddingBottom: isMessagesPage ? 0 : `${BOTTOM_NAV_HEIGHT + 12}px`,
+    flex: 1,
+    minHeight: 0,
   } : {
     display: 'grid',
     gridTemplateColumns: '280px 1fr',
@@ -47,7 +66,6 @@ const MainLayout = () => {
       <Navbar />
       <div style={layoutStyle}>
         {!isMobile && <Sidebar />}
-        {/* Dynamic content will be injected where <Outlet /> is */}
         <Outlet />
       </div>
       {isMobile && <BottomNav />}

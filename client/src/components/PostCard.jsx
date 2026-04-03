@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resolveApiUrl } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Reusable post card used in Home and Travel feeds.
@@ -13,13 +14,9 @@ const PostCard = ({ post, children }) => {
   const [hovered, setHovered] = useState(false);
   const [msgHover, setMsgHover] = useState(false);
 
-  const sessionUser = (() => {
-    try { return JSON.parse(sessionStorage.getItem('currentUser')); }
-    catch { return null; }
-  })();
-
-  const myName = sessionUser?.profileName || '';
-  const authorName = post.author?.profileName || '';
+  const { user } = useAuth();
+  const myName = user?.username || user?.profileName || '';
+  const authorName = post.username || post.author?.profileName || '';
   const isOwnPost = myName && authorName && myName === authorName;
 
   const goProfile = () => {
@@ -33,8 +30,8 @@ const PostCard = ({ post, children }) => {
     navigate(`/messages?chat=${authorName}`);
   };
 
-  const mediaUrl  = resolveApiUrl(post.media?.url || '');
-  const mediaType = post.media?.type || '';
+  const mediaUrl  = resolveApiUrl(post.imageUrl || post.media?.url || '');
+  const mediaType = post.media?.type || (mediaUrl ? 'image' : '');
 
   return (
     <div
@@ -52,7 +49,7 @@ const PostCard = ({ post, children }) => {
           style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', flex: 1, minWidth: 0 }}
         >
           <img
-            src={post.author?.profilePic || `https://i.pravatar.cc/150?img=${Math.abs((authorName.charCodeAt(0) || 1)) % 70 + 1}`}
+            src={post.avatarUrl || post.author?.profilePic || `https://i.pravatar.cc/150?img=${Math.abs((authorName.charCodeAt(0) || 1)) % 70 + 1}`}
             alt={authorName}
             style={{
               width: '42px', height: '42px', borderRadius: '50%',
@@ -64,9 +61,7 @@ const PostCard = ({ post, children }) => {
           />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              {post.author?.firstName
-                ? `${post.author.firstName} ${post.author.lastName || ''}`.trim()
-                : (authorName || 'User')}
+              {post.name || (authorName || 'User')}
               {/* subtle profile arrow on hover */}
               {hovered && (
                 <span style={{ fontSize: '0.7rem', color: 'var(--saffron, #f97316)', opacity: 0.85 }}>→ profile</span>
@@ -84,7 +79,7 @@ const PostCard = ({ post, children }) => {
             onClick={goMessage}
             onMouseEnter={() => setMsgHover(true)}
             onMouseLeave={() => setMsgHover(false)}
-            title={`Message ${post.author?.firstName || authorName}`}
+            title={`Message ${post.name || authorName}`}
             style={{
               display: 'flex',
               alignItems: 'center',

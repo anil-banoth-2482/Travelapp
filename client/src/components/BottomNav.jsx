@@ -38,6 +38,11 @@ const BottomNav = () => {
   const { getTotalUnread } = useMessages();
   const totalUnread = getTotalUnread();
 
+  // Hide the nav when a chat is open so it doesn't cover the input panel
+  const searchParams = new URLSearchParams(location.search);
+  const chatOpen = location.pathname === '/messages' && !!searchParams.get('chat');
+  if (chatOpen) return null;
+
   const items = [
     { Icon: HomeIcon,    label: 'Home',     path: '/home' },
     { Icon: TravelIcon,  label: 'Travel',   path: '/travel' },

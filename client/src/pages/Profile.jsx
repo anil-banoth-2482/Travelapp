@@ -3,29 +3,32 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
 import { apiFetch, resolveApiUrl } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── Demo / synthetic user fallback ──────────────────────────────────── */
 const SYNTHETIC_USERS = {
-  aditi_rao:    { profileName: 'aditi_rao',    firstName: 'Aditi',   lastName: 'Rao',   bio: 'Digital Artist · Bengaluru', profilePic: 'https://i.pravatar.cc/150?img=5' },
-  vikram_singh: { profileName: 'vikram_singh', firstName: 'Vikram',  lastName: 'Singh', bio: 'Photographer · Delhi',        profilePic: 'https://i.pravatar.cc/150?img=8' },
-  neha_gupta:   { profileName: 'neha_gupta',   firstName: 'Neha',    lastName: 'Gupta', bio: 'Travel Blogger · Mumbai',     profilePic: 'https://i.pravatar.cc/150?img=9' },
+  aditi_rao:    { username: 'aditi_rao',    name: 'Aditi Rao',   bio: 'Digital Artist · Bengaluru', avatarUrl: 'https://i.pravatar.cc/150?img=5' },
+  vikram_singh: { username: 'vikram_singh', name: 'Vikram Singh', bio: 'Photographer · Delhi',        avatarUrl: 'https://i.pravatar.cc/150?img=8' },
+  neha_gupta:   { username: 'neha_gupta',   name: 'Neha Gupta',  bio: 'Travel Blogger · Mumbai',     avatarUrl: 'https://i.pravatar.cc/150?img=9' },
 };
 
 const resolveUser = (id) => {
-  // 1. Check real users in localStorage
-  const users = JSON.parse(localStorage.getItem('users') || '[]');
-  const real = users.find(u => u.profileName === id);
-  if (real) return real;
-  // 2. Synthetic demo users
+  // 1. Synthetic demo users
   if (SYNTHETIC_USERS[id]) return SYNTHETIC_USERS[id];
-  // 3. Generic placeholder
+  // 2. Generic placeholder
   return {
-    profileName: id,
-    firstName: id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    lastName: '',
+    username: id,
+    name: id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
     bio: '',
-    profilePic: `https://i.pravatar.cc/150?img=${Math.abs(id.charCodeAt(0)) % 70 + 1}`,
+    avatarUrl: `https://i.pravatar.cc/150?img=${Math.abs(id.charCodeAt(0)) % 70 + 1}`,
   };
+};
+
+const splitName = (name = '') => {
+  const parts = String(name).trim().split(' ');
+  if (parts.length === 0) return { firstName: '', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 };
 
 const fmt = (ts) => {
@@ -50,55 +53,80 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [myPosts, setMyPosts] = useState([]);
   const [myPostsLoading, setMyPostsLoading] = useState(false);
-  const [editData, setEditData] = useState({ profileName: '', bio: '', profilePic: '', firstName: '', lastName: '' });
+  const [editData, setEditData] = useState({ username: '', bio: '', avatarUrl: '', firstName: '', lastName: '' });
 
   // Inline chat state
   const [chatInput, setChatInput] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const chatBottomRef = useRef(null);
 
-  const sessionUser = (() => { try { return JSON.parse(sessionStorage.getItem('currentUser')); } catch { return null; } })();
-  const myName = sessionUser?.profileName || '';
+  const { user: sessionUser, setUser: setAuthUser } = useAuth();
+  const myName = sessionUser?.username || '';
 
   const isOwnProfile =
     !id ||
-    (sessionUser?.profileName && id && sessionUser.profileName === id) ||
-    (sessionUser?.profileName && user?.profileName && sessionUser.profileName === user.profileName);
+    (sessionUser?.username && id && sessionUser.username === id) ||
+    (sessionUser?.username && user?.username && sessionUser.username === user.username);
 
   /* ── Load user ── */
   useEffect(() => {
-    if (!id || (sessionUser && sessionUser.profileName === id)) {
-      setUser(sessionUser);
-      setEditData({
-        profileName: sessionUser?.profileName || '',
-        bio: sessionUser?.bio || '',
-        profilePic: sessionUser?.profilePic || 'https://i.pravatar.cc/150?img=1',
-        firstName: sessionUser?.firstName || '',
-        lastName: sessionUser?.lastName || '',
-      });
-    } else {
-      setUser(resolveUser(id));
-    }
-    setMyPosts([]);
+    let mounted = true;
+    const loadProfile = async () => {
+      try {
+        if (!id || (sessionUser && sessionUser.username === id)) {
+          const res = await apiFetch('/api/users/me');
+          if (!res.ok) throw new Error();
+          const json = await res.json();
+          const { firstName, lastName } = splitName(json.user?.name || '');
+          if (!mounted) return;
+          setUser(json.user || null);
+          setEditData({
+            username: json.user?.username || '',
+            bio: json.user?.bio || '',
+            avatarUrl: json.user?.avatarUrl || 'https://i.pravatar.cc/150?img=1',
+            firstName,
+            lastName,
+          });
+        } else {
+          const res = await apiFetch(`/api/users/${id}`);
+          if (!res.ok) throw new Error();
+          const json = await res.json();
+          if (!mounted) return;
+          setUser(json.user || resolveUser(id));
+        }
+      } catch {
+        if (!mounted) return;
+        if (!id || (sessionUser && sessionUser.username === id)) {
+          setUser(sessionUser || null);
+        } else {
+          setUser(resolveUser(id));
+        }
+      } finally {
+        if (mounted) setMyPosts([]);
+      }
+    };
+
+    loadProfile();
+    return () => { mounted = false; };
   }, [id]);
 
   /* ── Load chat thread when panel opens ── */
   useEffect(() => {
-    if (chatOpen && !isOwnProfile && user?.profileName && myName) {
-      fetchThread(myName, user.profileName);
-      markRead(myName, user.profileName);
+    if (chatOpen && !isOwnProfile && user?.username && myName) {
+      fetchThread(myName, user.username);
+      markRead(myName, user.username);
     }
-  }, [chatOpen, user?.profileName, myName, isOwnProfile]);
+  }, [chatOpen, user?.username, myName, isOwnProfile]);
 
   /* ── Poll chat thread every 4s when open ── */
   useEffect(() => {
-    if (!chatOpen || isOwnProfile || !user?.profileName || !myName) return;
-    const iv = setInterval(() => fetchThread(myName, user.profileName), 4000);
+    if (!chatOpen || isOwnProfile || !user?.username || !myName) return;
+    const iv = setInterval(() => fetchThread(myName, user.username), 4000);
     return () => clearInterval(iv);
-  }, [chatOpen, user?.profileName, myName, isOwnProfile]);
+  }, [chatOpen, user?.username, myName, isOwnProfile]);
 
-  const chatMessages = (!isOwnProfile && user?.profileName && myName)
-    ? getThread(myName, user.profileName)
+  const chatMessages = (!isOwnProfile && user?.username && myName)
+    ? getThread(myName, user.username)
     : [];
 
   useEffect(() => {
@@ -108,53 +136,69 @@ const Profile = () => {
   /* ── Posts view ── */
   const isPostsView = isOwnProfile && searchParams.get('view') === 'posts';
   const selectedPostId = isPostsView ? searchParams.get('post') : null;
-  const selectedPost = selectedPostId ? myPosts.find(p => p?.id === selectedPostId) : null;
+  const selectedPost = selectedPostId ? myPosts.find(p => String(p?._id) === selectedPostId) : null;
 
-  const loadMyPosts = async (profileName) => {
-    if (!profileName) return;
+  const loadMyPosts = async (username) => {
+    if (!username) return;
     setMyPostsLoading(true);
     try {
       const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error();
       const json = await res.json();
       const list = Array.isArray(json.posts) ? json.posts : [];
-      setMyPosts(list.filter(p => p?.author?.profileName === profileName).sort((a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0)));
+      setMyPosts(list.filter(p => p?.username === username).sort((a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0)));
     } catch { setMyPosts([]); }
     finally { setMyPostsLoading(false); }
   };
 
   useEffect(() => {
-    if (!isPostsView || !user?.profileName || myPostsLoading || myPosts.length > 0) return;
-    loadMyPosts(user.profileName);
-  }, [isPostsView, user?.profileName]);
+    if (!isPostsView || !user?.username || myPostsLoading || myPosts.length > 0) return;
+    loadMyPosts(user.username);
+  }, [isPostsView, user?.username]);
 
   /* ── Edit / Save ── */
-  const handleSave = () => {
-    if (!editData.profileName.trim()) { alert(t('profile_username_empty')); return; }
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    if (editData.profileName !== user.profileName) {
-      if (users.some(u => u.profileName === editData.profileName && u.email !== user.email)) { alert(t('profile_username_taken')); return; }
+  const handleSave = async () => {
+    if (!editData.username.trim()) { alert(t('profile_username_empty')); return; }
+    try {
+      const res = await apiFetch('/api/users/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: editData.username,
+          name: `${editData.firstName} ${editData.lastName}`.trim(),
+          bio: editData.bio,
+          avatarUrl: editData.avatarUrl,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Update failed');
+      }
+      const json = await res.json();
+      const updated = json.user || null;
+      // Update BOTH the global auth context and local profile state so
+      // the page re-renders immediately without requiring navigation away
+      setAuthUser(updated);
+      setUser(updated);
+      if (updated) {
+        const { firstName, lastName } = splitName(updated.name || '');
+        setEditData(prev => ({ ...prev, firstName, lastName, username: updated.username || prev.username, bio: updated.bio || '', avatarUrl: updated.avatarUrl || prev.avatarUrl }));
+      }
+      setIsEditing(false);
+    } catch (err) {
+      alert(err?.message || t('profile_username_taken'));
     }
-    const updatedUser = { ...user, ...editData };
-    localStorage.setItem('users', JSON.stringify(users.map(u => u.email === user.email ? updatedUser : u)));
-    const userJson = JSON.stringify(updatedUser);
-    sessionStorage.setItem('currentUser', userJson);
-    localStorage.setItem('currentUser', userJson);
-    setUser(updatedUser);
-    setIsEditing(false);
-    window.dispatchEvent(new Event('authchange'));
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) { const reader = new FileReader(); reader.onloadend = () => setEditData({ ...editData, profilePic: reader.result }); reader.readAsDataURL(file); }
+    if (file) { const reader = new FileReader(); reader.onloadend = () => setEditData({ ...editData, avatarUrl: reader.result }); reader.readAsDataURL(file); }
   };
 
   /* ── Send inline message ── */
   const handleChatSend = async (e) => {
     e.preventDefault();
-    if (!chatInput.trim() || !user?.profileName) return;
-    await sendMessage(myName, user.profileName, chatInput);
+    if (!chatInput.trim() || !user?.username) return;
+    await sendMessage(myName, user.username, chatInput);
     setChatInput('');
     setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
@@ -173,7 +217,7 @@ const Profile = () => {
         <div style={{ textAlign: 'center' }}>
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <img
-              src={isEditing ? editData.profilePic : (user.profilePic || 'https://i.pravatar.cc/150?img=1')}
+              src={isEditing ? editData.avatarUrl : (user.avatarUrl || 'https://i.pravatar.cc/150?img=1')}
               alt="Profile"
               style={{ width: '130px', height: '130px', borderRadius: '50%', border: '4px solid var(--saffron)', marginBottom: '1.25rem', objectFit: 'cover' }}
             />
@@ -199,7 +243,7 @@ const Profile = () => {
                 <label style={labelStyle}>{t('profile_username')}</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--saffron)', fontWeight: 600 }}>@</span>
-                  <input type="text" value={editData.profileName} onChange={e => setEditData({ ...editData, profileName: e.target.value.toLowerCase().replace(/\s/g, '') })} style={{ ...inputStyle, paddingLeft: '2rem' }} />
+                  <input type="text" value={editData.username} onChange={e => setEditData({ ...editData, username: e.target.value.toLowerCase().replace(/\s/g, '') })} style={{ ...inputStyle, paddingLeft: '2rem' }} />
                 </div>
               </div>
               <div style={fieldGroup}>
@@ -213,8 +257,8 @@ const Profile = () => {
             </div>
           ) : (
             <>
-              <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>{user.firstName} {user.lastName}</h2>
-              <p style={{ color: 'var(--saffron)', fontWeight: 600, fontSize: '1rem' }}>@{user.profileName}</p>
+              <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>{user.name || 'User'}</h2>
+              <p style={{ color: 'var(--saffron)', fontWeight: 600, fontSize: '1rem' }}>@{user.username}</p>
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.75rem', fontSize: '1rem', lineHeight: 1.6 }}>
                 {user.bio || t('profile_no_bio')}
               </p>
@@ -224,7 +268,11 @@ const Profile = () => {
 
         {/* Stats */}
         <div style={{ display: 'flex', gap: '3rem', justifyContent: 'center', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
-          {[['42', 'Posts'], ['1.2K', 'Followers'], ['384', 'Following']].map(([val, label]) => (
+          {[
+            [user.postsCount ?? '—', 'Posts'],
+            [user.followersCount ?? '—', 'Followers'],
+            [user.followingCount ?? '—', 'Following'],
+          ].map(([val, label]) => (
             <div key={label} style={{ textAlign: 'center' }}>
               <h3 style={{ color: 'var(--saffron)', fontSize: '1.4rem', marginBottom: '0.2rem' }}>{val}</h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
@@ -296,21 +344,17 @@ const Profile = () => {
                 <button onClick={() => setSearchParams({ view: 'posts' })} style={{ ...cancelBtnStyle, marginBottom: '1rem', padding: '0.5rem 0.9rem', borderRadius: '8px' }}>
                   {t('profile_all_posts')}
                 </button>
-                {selectedPost.media?.type === 'image' && selectedPost.media?.url && (
-                  <img src={resolveApiUrl(selectedPost.media.url)} alt="Post" style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', objectFit: 'cover', marginBottom: '0.9rem' }} />
-                )}
-                {selectedPost.media?.type === 'video' && selectedPost.media?.url && (
-                  <video src={resolveApiUrl(selectedPost.media.url)} controls style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', marginBottom: '0.9rem' }} />
+                {selectedPost.imageUrl && (
+                  <img src={resolveApiUrl(selectedPost.imageUrl)} alt="Post" style={{ width: '100%', borderRadius: '14px', maxHeight: '480px', objectFit: 'cover', marginBottom: '0.9rem' }} />
                 )}
                 <div style={{ fontSize: '1rem', lineHeight: 1.6 }}>{selectedPost.description}</div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                 {myPosts.map(post => (
-                  <button key={post.id} type="button" onClick={() => setSearchParams({ view: 'posts', post: post.id })} style={{ border: 'none', padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1/1' }}>
-                    {post.media?.type === 'image' && post.media?.url && <img src={resolveApiUrl(post.media.url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-                    {post.media?.type === 'video' && post.media?.url && <video src={resolveApiUrl(post.media.url)} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-                    {!post.media?.url && <div className="glass" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontWeight: 600 }}>Post</div>}
+                  <button key={post._id} type="button" onClick={() => setSearchParams({ view: 'posts', post: String(post._id) })} style={{ border: 'none', padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1/1' }}>
+                    {post.imageUrl && <img src={resolveApiUrl(post.imageUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                    {!post.imageUrl && <div className="glass" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontWeight: 600 }}>Post</div>}
                   </button>
                 ))}
               </div>
@@ -324,13 +368,13 @@ const Profile = () => {
         <div className="glass animate-up" style={{ display: 'flex', flexDirection: 'column', height: '420px', overflow: 'hidden' }}>
           {/* Chat header */}
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <img src={user.profilePic || 'https://i.pravatar.cc/150?img=1'} alt="" style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)' }} />
+            <img src={user.avatarUrl || 'https://i.pravatar.cc/150?img=1'} alt="" style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)' }} />
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{user.firstName} {user.lastName}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{user.profileName}</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{user.name || 'User'}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{user.username}</div>
             </div>
             <button
-              onClick={() => navigate(`/messages?chat=${user.profileName}`)}
+              onClick={() => navigate(`/messages?chat=${user.username}`)}
               style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', padding: '0.4rem 0.9rem', borderRadius: '20px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
             >
               Open in Messages →
@@ -341,12 +385,12 @@ const Profile = () => {
           <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {chatMessages.length === 0 ? (
               <div style={{ textAlign: 'center', margin: 'auto', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                <p>Start chatting with {user.firstName}!</p>
+                <p>Start chatting with {user.name || user.username}!</p>
               </div>
             ) : chatMessages.map(msg => {
-              const isMine = msg.from === myName;
+              const isMine = msg.fromUsername === myName;
               return (
-                <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                <div key={msg._id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
                   <div style={{
                     maxWidth: '70%',
                     padding: '0.55rem 0.9rem',
@@ -357,7 +401,7 @@ const Profile = () => {
                     lineHeight: 1.45,
                   }}>
                     <div>{msg.text}</div>
-                    <div style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '0.2rem', textAlign: 'right' }}>{fmt(msg.ts)}</div>
+                    <div style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '0.2rem', textAlign: 'right' }}>{fmt(new Date(msg.createdAt).getTime())}</div>
                   </div>
                 </div>
               );
@@ -371,7 +415,7 @@ const Profile = () => {
               type="text"
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
-              placeholder={`Message ${user.firstName}…`}
+              placeholder={`Message ${user.name || user.username}…`}
               style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '30px', padding: '0.65rem 1.1rem', color: 'var(--text-primary)', fontSize: '0.88rem', outline: 'none' }}
             />
             <button type="submit" disabled={!chatInput.trim()} style={{

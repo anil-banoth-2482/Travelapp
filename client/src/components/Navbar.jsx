@@ -2,19 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage, availableLanguages } from '../context/LanguageContext';
 import { useMessages } from '../context/MessagesContext';
+import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
-const getUserInfo = (profileName) => {
-  const users = JSON.parse(localStorage.getItem('users') || '[]');
-  const u = users.find(u => u.profileName === profileName);
-  if (u) return {
-    name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.profileName,
-    avatar: u.profilePic || `https://i.pravatar.cc/150?img=${Math.abs(profileName.charCodeAt(0)) % 70 + 1}`,
-  };
-  return {
-    name: profileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    avatar: `https://i.pravatar.cc/150?img=${Math.abs(profileName.charCodeAt(0)) % 70 + 1}`,
-  };
-};
+
+// Generates a display name from username as fallback
+const getUserDisplayName = (username) =>
+  username.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+// Fallback avatar when profile hasn't loaded yet
+const fallbackAvatar = (username) =>
+  `https://i.pravatar.cc/150?img=${Math.abs(username.charCodeAt(0)) % 70 + 1}`;
 
 const fmtTime = (ts) => {
   if (!ts) return '';
@@ -39,42 +37,53 @@ const BellIcon = ({ hasUnread }) => (
 const Navbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
-  const getStoredUser = () => {
-    const sessionUser = sessionStorage.getItem('currentUser');
-    if (sessionUser) return JSON.parse(sessionUser);
-    const localUser = localStorage.getItem('currentUser');
-    return localUser ? JSON.parse(localUser) : null;
-  };
-
-  const [currentUser, setCurrentUser] = useState(getStoredUser());
+  const { user, logout } = useAuth();
   const dropdownRef = useRef(null);
   const notifRef = useRef(null);
   const navigate = useNavigate();
   const { t, language, setLanguage } = useLanguage();
 
-  const myName = currentUser?.profileName || '';
+  const myName = user?.username || '';
   const { getTotalUnread, getUnreadSummary, markRead } = useMessages();
   const totalUnread = getTotalUnread();
   const unreadSummary = getUnreadSummary();
+
+  // Cache of real user profiles fetched from the API: { username: { name, avatarUrl } }
+  const [profileCache, setProfileCache] = useState({});
+
+  const fetchSenderProfile = async (username) => {
+    if (!username || profileCache[username] !== undefined) return;
+    // Mark as loading to prevent duplicate fetches
+    setProfileCache(prev => ({ ...prev, [username]: null }));
+    try {
+      const res = await apiFetch(`/api/users/${username}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      setProfileCache(prev => ({ ...prev, [username]: json.user || null }));
+    } catch {
+      // keep null — fallback avatar will be used
+    }
+  };
+
+  // Fetch profiles for all unread senders whenever the panel opens
+  useEffect(() => {
+    if (!showNotif) return;
+    unreadSummary.forEach(({ fromUser }) => fetchSenderProfile(fromUser));
+  }, [showNotif, unreadSummary]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setShowDropdown(false);
       if (notifRef.current && !notifRef.current.contains(event.target)) setShowNotif(false);
     };
-    const handleAuthChange = () => setCurrentUser(getStoredUser());
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('authchange', handleAuthChange);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('authchange', handleAuthChange);
     };
   }, []);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('currentUser');
-    localStorage.removeItem('currentUser');
-    window.dispatchEvent(new Event('authchange'));
+  const handleLogout = async () => {
+    await logout();
     setShowDropdown(false);
     navigate('/login');
   };
@@ -206,7 +215,9 @@ const Navbar = () => {
               ) : (
                 <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
                   {unreadSummary.map(({ fromUser, lastMsg, count }) => {
-                    const info = getUserInfo(fromUser);
+                    const profile = profileCache[fromUser];
+                    const displayName = profile?.name || getUserDisplayName(fromUser);
+                    const avatarSrc = profile?.avatarUrl || fallbackAvatar(fromUser);
                     return (
                       <div
                         key={fromUser}
@@ -215,16 +226,27 @@ const Navbar = () => {
                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(249,115,22,0.07)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
-                        <img src={info.avatar} alt={info.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', flexShrink: 0 }} />
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                          <img
+                            src={avatarSrc}
+                            alt={displayName}
+                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', display: 'block' }}
+                            onError={e => { e.currentTarget.src = fallbackAvatar(fromUser); }}
+                          />
+                          {/* Loading shimmer when profile is still fetching */}
+                          {profile === null && (
+                            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(249,115,22,0.15)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                          )}
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '0.83rem', color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.15rem' }}>
-                            <span style={{ color: 'var(--saffron, #f97316)' }}>{info.name}</span>
+                            <span style={{ color: 'var(--saffron, #f97316)' }}>{displayName}</span>
                             {count > 1 ? ` · ${count} new messages` : ' · new message'}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {lastMsg?.text}
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginTop: '0.15rem' }}>{fmtTime(lastMsg?.ts)}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginTop: '0.15rem' }}>{fmtTime(lastMsg?.createdAt)}</div>
                         </div>
                         <span style={{ background: 'var(--saffron, #f97316)', color: 'white', fontSize: '0.68rem', fontWeight: 700, borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', flexShrink: 0 }}>
                           {count}
@@ -276,7 +298,7 @@ const Navbar = () => {
         {/* Profile avatar + dropdown */}
         <div ref={dropdownRef} style={{ position: 'relative' }}>
           <img
-            src={currentUser?.profilePic || 'https://i.pravatar.cc/150?img=1'}
+            src={user?.avatarUrl || 'https://i.pravatar.cc/150?img=1'}
             alt="Profile"
             style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--saffron, #f97316)', cursor: 'pointer', transition: 'all 0.2s' }}
             onClick={() => setShowDropdown(!showDropdown)}
